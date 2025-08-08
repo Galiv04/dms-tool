@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+pydantic
+pydantic[email]
+pydantic-settings
+python-dotenv
+argon2-cffi
+PyJWT
+python-multipart
+httpx
+pytest
+pytest-asyncio
+requests
+
