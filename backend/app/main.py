@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles  # Aggiungi questa riga
-from app.routers import health, auth
+from app.routers import health, auth, documents
 from app.config import settings
 
 app = FastAPI(title=settings.app_name)
@@ -21,6 +21,7 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router, tags=["health"])
 app.include_router(auth.router, tags=["authentication"])  # Aggiungi auth
+app.include_router(documents.router, tags=["documents"])
 
 @app.get("/")
 async def root():

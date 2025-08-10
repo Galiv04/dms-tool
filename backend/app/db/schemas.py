@@ -28,13 +28,38 @@ class DocumentBase(BaseModel):
     content_type: str
     size: float
 
+class DocumentCreate(BaseModel):
+    filename: str
+    content_type: str
 
-class DocumentResponse(DocumentBase):
-    model_config = ConfigDict(from_attributes=True)  # ← Fix Pydantic V2
+class DocumentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     
     id: str
     owner_id: int
+    filename: str
+    original_filename: str
+    content_type: str
+    size: float
+    file_hash: str
     created_at: datetime
+    updated_at: Optional[datetime]
+
+class DocumentListResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    owner_id: int  # ← Aggiungi questo campo
+    filename: str
+    original_filename: str
+    content_type: str
+    size: float
+    created_at: datetime
+
+
+class DocumentUploadResponse(BaseModel):
+    document: DocumentResponse
+    message: str
 
 
 # Approval Schemas
