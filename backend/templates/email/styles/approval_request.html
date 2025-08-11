@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Richiesta di Approvazione - {{ title }}{% endblock %}
+
+{% block header_class %}primary{% endblock %}
+{% block header_icon %}📋{% endblock %}
+{% block header_title %}Richiesta di Approvazione{% endblock %}
+
+{% block content %}
+<p>Ciao <strong>{{ recipient_name }}</strong>,</p>
+
+<p>Hai ricevuto una nuova richiesta di approvazione da <strong>{{ requester_name }}</strong>.</p>
+
+<div class="document-info">
+    <h3><span class="document-icon">📄</span>{{ title }}</h3>
+    
+    {% if description %}
+    <p><em>{{ description }}</em></p>
+    {% endif %}
+    
+    <div class="detail-row">
+        <span class="detail-label">Documento:</span>
+        <span class="detail-value">{{ document_filename }}</span>
+    </div>
+    
+    <div class="detail-row">
+        <span class="detail-label">Tipo Approvazione:</span>
+        <span class="detail-value">
+            {% if approval_type == 'all' %}
+                Tutti i destinatari devono approvare
+            {% else %}
+                È sufficiente un'approvazione
+            {% endif %}
+        </span>
+    </div>
+    
+    {% if expires_at %}
+    <div class="detail-row">
+        <span class="detail-label expires-info">
+            <span class="clock-icon">⏰</span>Scade il:
+        </span>
+        <span class="detail-value">{{ expires_at.strftime('%d/%m/%Y alle %H:%M') }}</span>
+    </div>
+    {% endif %}
+    
+    {% if requester_comments %}
+    <div class="comments-section">
+        <div class="comments-label">Commenti del richiedente:</div>
+        {{ requester_comments }}
+    </div>
+    {% endif %}
+</div>
+
+<div class="action-buttons">
+    <a href="{{ approval_url }}?decision=approved" class="btn btn-approve">
+        ✅ Approva
+    </a>
+    <a href="{{ approval_url }}?decision=rejected" class="btn btn-reject">
+        ❌ Rifiuta
+    </a>
+</div>
+
+<p style="text-align: center; margin-top: 20px;">
+    <a href="{{ approval_url }}" class="primary-link">
+        Clicca qui per visualizzare i dettagli completi
+    </a>
+</p>
+
+<hr class="divider">
+
+<div class="note-section">
+    <div class="note-label">Nota:</div>
+    Questo link è personale e ha validità limitata. Non condividerlo con altri utenti.
+</div>
+{% endblock %}
+
+{% block footer_extra %}
+<p class="footer-info">
+    Token: <span class="token-info">{{ approval_token[:8] }}...</span>
+</p>
+{% endblock %}

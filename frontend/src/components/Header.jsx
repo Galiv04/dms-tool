@@ -1,71 +1,34 @@
-import React from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import './Header.css';
+// src/components/Header.jsx - SEMPLIFICATO (ora usiamo AppLayout)
+import React from 'react'
+import { useLocation } from 'react-router-dom'
 
 const Header = () => {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  // Non mostrare header nelle pagine di login/register
-  if (location.pathname === '/login' || location.pathname === '/register') {
-    return null;
+  const location = useLocation()
+  
+  // Il nuovo layout gestisce tutto - questo componente non è più necessario
+  // ma lo manteniamo per compatibilità
+  
+  // Non mostrare header nelle pagine di login/register e quando usiamo il nuovo layout
+  if (
+    location.pathname === '/login' || 
+    location.pathname === '/register' ||
+    location.pathname === '/' ||
+    location.pathname === '/documents' ||
+    location.pathname === '/approvals' ||
+    location.pathname === '/admin'
+  ) {
+    return null
   }
 
   return (
-    <header className="app-header">
-      <div className="header-content">
-        <div className="header-brand">
-          <Link to="/" className="brand-link">
-            📋 DMS Tool
-          </Link>
+    <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container flex h-14 items-center">
+        <div className="mr-4 flex">
+          <span className="font-bold">DMS Tool</span>
         </div>
-
-        {user && (
-          <>
-            <nav className="header-nav">
-              <Link 
-                to="/documents" 
-                className={`nav-link ${location.pathname === '/documents' || location.pathname === '/' ? 'active' : ''}`}
-              >
-                📄 Documenti
-              </Link>
-              <Link 
-                to="/health" 
-                className={`nav-link ${location.pathname === '/health' ? 'active' : ''}`}
-              >
-                🏥 Stato Sistema
-              </Link>
-            </nav>
-
-            <div className="header-user">
-              <div className="user-info">
-                <span className="user-name">
-                  👤 {user.display_name || user.email}
-                </span>
-                <span className="user-role">
-                  {user.role === 'ADMIN' ? '🔧 Admin' : '👤 Utente'}
-                </span>
-              </div>
-              <button 
-                onClick={handleLogout} 
-                className="logout-btn"
-                title="Logout"
-              >
-                🚪 Esci
-              </button>
-            </div>
-          </>
-        )}
       </div>
     </header>
-  );
-};
+  )
+}
 
-export default Header;
+export default Header

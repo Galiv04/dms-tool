@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>{% block title %}{{ app_name }}{% endblock %}</title>
+    <style>
+        {% include 'styles/email.css' %}
+        {% block extra_styles %}{% endblock %}
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header Section -->
+        <div class="email-header {% block header_class %}primary{% endblock %}">
+            <span class="icon">{% block header_icon %}🔔{% endblock %}</span>
+            <h1>{% block header_title %}Notifica{% endblock %}</h1>
+            <p class="subtitle">{{ app_name }}</p>
+        </div>
+        
+        <!-- Content Section -->
+        <div class="email-content">
+            {% block content %}
+            <p>Contenuto email non specificato.</p>
+            {% endblock %}
+        </div>
+        
+        <!-- Footer Section -->
+        <div class="email-footer">
+            {% block footer %}
+            <p>© {{ current_year or '2024' }} {{ app_name }} - Sistema di Gestione Documenti</p>
+            {% block footer_extra %}{% endblock %}
+            {% endblock %}
+        </div>
+    </div>
+</body>
+</html>

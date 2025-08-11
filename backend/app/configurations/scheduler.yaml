@@ -1,0 +1,69 @@
+# ======================================================================
+# Task Scheduler Configuration - DMS System
+# File di configurazione per personalizzare tutti i task schedulati
+# ======================================================================
+
+# app/config/scheduler.yaml
+# Configurazione Scheduler DMS-Tool
+
+# Impostazioni generali scheduler
+enabled: true
+max_workers: 3
+task_timeout_minutes: 10
+
+# Configurazioni task
+reminder_days_before_expiry: 2
+reminder_min_interval_hours: 12
+expired_tokens_cleanup_days: 7
+audit_logs_retention_days: 60
+audit_cleanup_batch_size: 500
+
+# Configurazioni statistiche
+weekly_stats_day: 1  # 1=Monday
+weekly_stats_time: "08:30"
+
+# Task configurazioni
+tasks:
+  approval_reminders:
+    enabled: true
+    interval_type: "hours"
+    interval_value: 2
+    description: "Invio reminder per approvazioni in scadenza"
+  
+  expire_tokens:
+    enabled: true
+    interval_type: "daily"
+    time_at: "01:30"
+    description: "Pulizia token scaduti dal database"
+  
+  expire_overdue:
+    enabled: true
+    interval_type: "minutes" 
+    interval_value: 20
+    description: "Controllo e scadenza approvazioni overdue"
+  
+  completion_notifications:
+    enabled: true
+    interval_type: "minutes"
+    interval_value: 10
+    description: "Invio notifiche completamento ritardate"
+  
+  weekly_statistics:
+    enabled: true
+    interval_type: "weekly"
+    time_at: "08:30"
+    description: "Generazione report statistiche settimanali"
+  
+  audit_cleanup:
+    enabled: true
+    interval_type: "daily"
+    time_at: "02:30"  
+    description: "Pulizia audit logs vecchi"
+
+# Notifiche scheduler
+scheduler_notifications:
+  enabled: false
+  admin_emails: []
+  notify_on_errors: true
+  notify_on_stats: false
+  error_threshold: 2

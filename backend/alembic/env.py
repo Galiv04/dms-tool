@@ -8,7 +8,7 @@ import sys
 # Aggiungi il path dell'app
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
-from app.config import settings
+from app.configurations import settings
 from app.db.base import Base
 from app.db.models import *  # Importa tutti i modelli
 

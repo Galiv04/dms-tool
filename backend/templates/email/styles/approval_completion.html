@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}
+Approvazione {% if final_status == 'approved' %}Approvata{% else %}Completata{% endif %} - {{ title }}
+{% endblock %}
+
+{% block header_class %}
+{% if final_status == 'approved' %}success{% elif final_status == 'rejected' %}danger{% else %}warning{% endif %}
+{% endblock %}
+
+{% block header_icon %}
+{% if final_status == 'approved' %}✅{% elif final_status == 'rejected' %}❌{% else %}🔄{% endif %}
+{% endblock %}
+
+{% block header_title %}
+{% if final_status == 'approved' %}
+Approvazione Completata
+{% elif final_status == 'rejected' %}
+Approvazione Rifiutata
+{% else %}
+Approvazione Completata
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<p>Ciao <strong>{{ requester_name }}</strong>,</p>
+
+<p>La tua richiesta di approvazione "<strong>{{ title }}</strong>" è stata completata.</p>
+
+<div class="document-info">
+    <h3><span class="document-icon">📄</span>{{ document_filename }}</h3>
+    
+    <div class="detail-row">
+        <span class="detail-label">Stato Finale:</span>
+        <span class="detail-value">
+            <span class="status-badge {{ final_status }}">{{ final_status.upper() }}</span>
+        </span>
+    </div>
+    
+    <div class="detail-row">
+        <span class="detail-label">Completata il:</span>
+        <span class="detail-value">
+            {{ completed_at.strftime('%d/%m/%Y alle %H:%M') if completed_at else 'N/A' }}
+        </span>
+    </div>
+    
+    {% if completion_reason %}
+    <div class="detail-row">
+        <span class="detail-label">Motivo:</span>
+        <span class="detail-value">{{ completion_reason }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<div class="stats-container">
+    <div class="stat-box">
+        <span class="stat-number success">{{ approved_count }}</span>
+        <span class="stat-label">Approvazioni</span>
+    </div>
+    <div class="stat-box">
+        <span class="stat-number danger">{{ rejected_count }}</span>
+        <span class="stat-label">Rifiuti</span>
+    </div>
+    <div class="stat-box">
+        <span class="stat-number neutral">{{ total_recipients }}</span>
+        <span class="stat-label">Totale Destinatari</span>
+    </div>
+</div>
+
+<div class="detail-row">
+    <span class="detail-label">Tipo Approvazione:</span>
+    <span class="detail-value">
+        {% if approval_type == 'all' %}
+            Tutti dovevano approvare
+        {% else %}
+            Era sufficiente un'approvazione
+        {% endif %}
+    </span>
+</div>
+
+<hr class="divider">
+
+<div class="note-section">
+    <div class="note-label">Informazione:</div>
+    Questa notifica è stata generata automaticamente dal sistema di gestione documenti.
+</div>
+{% endblock %}
+
+{% block footer_extra %}
+<p class="footer-info">
+    Richiesta creata il: {{ created_at.strftime('%d/%m/%Y') }}
+</p>
+{% endblock %}

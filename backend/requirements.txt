@@ -13,4 +13,6 @@ httpx
 pytest
 pytest-asyncio
 requests
-
+jinja2
+PyYAML
+schedule

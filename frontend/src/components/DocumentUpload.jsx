@@ -1,13 +1,22 @@
-import React, { useState, useRef } from 'react';
-import { uploadDocument, validateFile } from '../api/documents';
-import './DocumentUpload.css';
+// src/components/DocumentUpload.jsx
+import React, { useState, useRef } from "react";
+import { useUploadDocument } from "../hooks/useDocuments";
+import { validateFile } from "../api/documents";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Upload, File, CheckCircle, XCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const DocumentUpload = ({ onUploadSuccess, onUploadError }) => {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState('');
+  const [uploadStatus, setUploadStatus] = useState("");
   const fileInputRef = useRef(null);
+
+  // React Query mutation per upload
+  const uploadMutation = useUploadDocument();
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -22,7 +31,6 @@ const DocumentUpload = ({ onUploadSuccess, onUploadError }) => {
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragOver(false);
-    
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
       handleFileUpload(files[0]);
@@ -34,12 +42,11 @@ const DocumentUpload = ({ onUploadSuccess, onUploadError }) => {
     if (files.length > 0) {
       handleFileUpload(files[0]);
     }
-    // Reset input per permettere re-upload dello stesso file
-    e.target.value = '';
+    e.target.value = "";
   };
 
+  // src/components/DocumentUpload.jsx - AGGIORNA QUESTA PARTE
   const handleFileUpload = async (file) => {
-    // Validazione client-side
     const validation = validateFile(file);
     if (!validation.valid) {
       setUploadStatus(`Errore: ${validation.error}`);
@@ -49,89 +56,173 @@ const DocumentUpload = ({ onUploadSuccess, onUploadError }) => {
       return;
     }
 
-    setIsUploading(true);
+    // ✅ DEBUG: Verifica file nel frontend
+    console.log("🔍 Frontend sending file:");
+    console.log("  - name:", file.name);
+    console.log("  - type:", file.type);
+    console.log("  - size:", file.size);
+
     setUploadProgress(0);
     setUploadStatus(`Caricando ${file.name}...`);
 
-    try {
-      const result = await uploadDocument(file, (progress) => {
-        setUploadProgress(progress);
-        setUploadStatus(`Caricando ${file.name}... ${progress}%`);
-      });
+    uploadMutation.mutate(
+      {
+        file,
+        onProgress: (progress) => {
+          setUploadProgress(progress);
+          setUploadStatus(`Caricando ${file.name}... ${progress}%`);
+        },
+      },
+      {
+        onSuccess: (result) => {
+          // ✅ DEBUG: Verifica response dal backend
+          console.log("📥 Backend response:", result);
 
-      setUploadStatus(`✅ ${file.name} caricato con successo!`);
-      
-      if (onUploadSuccess) {
-        onUploadSuccess(result);
+          // ✅ USA SEMPRE il filename dalla response del backend
+          const backendFilename =
+            result?.document?.filename || result?.filename;
+          const displayName = backendFilename || file.name || "documento";
+
+          console.log("📝 Using filename:", displayName);
+
+          setUploadStatus(`✅ ${displayName} caricato con successo!`);
+          setUploadProgress(100);
+
+          if (onUploadSuccess) {
+            // ✅ Passa la response completa, non solo il file
+            onUploadSuccess(result?.document || result);
+          }
+
+          setTimeout(() => {
+            setUploadStatus("");
+            setUploadProgress(0);
+          }, 3000);
+        },
+        onError: (error) => {
+          console.error("💥 Upload error:", error);
+          const errorMessage =
+            error.response?.data?.detail ||
+            error.message ||
+            "Errore durante l'upload";
+          setUploadStatus(`❌ Errore: ${errorMessage}`);
+          setUploadProgress(0);
+
+          if (onUploadError) {
+            onUploadError(errorMessage);
+          }
+
+          setTimeout(() => {
+            setUploadStatus("");
+          }, 5000);
+        },
       }
-
-      // Reset dopo successo
-      setTimeout(() => {
-        setUploadStatus('');
-        setUploadProgress(0);
-      }, 3000);
-
-    } catch (error) {
-      const errorMessage = error.response?.data?.detail || 'Errore durante l\'upload';
-      setUploadStatus(`❌ Errore: ${errorMessage}`);
-      
-      if (onUploadError) {
-        onUploadError(errorMessage);
-      }
-    } finally {
-      setIsUploading(false);
-    }
+    );
   };
 
   const openFileSelector = () => {
     fileInputRef.current?.click();
   };
 
+  const isUploading = uploadMutation.isPending;
+
   return (
-    <div className="document-upload">
-      <div
-        className={`upload-area ${isDragOver ? 'drag-over' : ''} ${isUploading ? 'uploading' : ''}`}
+    <div className="space-y-4">
+      <Card
+        className={cn(
+          "border-2 border-dashed transition-all duration-200 cursor-pointer",
+          isDragOver
+            ? "border-primary bg-primary/5"
+            : "border-muted-foreground/25 hover:border-primary/50",
+          isUploading && "cursor-not-allowed opacity-60"
+        )}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={openFileSelector}
+        onClick={!isUploading ? openFileSelector : undefined}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          onChange={handleFileSelect}
-          accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.xls,.xlsx,.ppt,.pptx"
-          style={{ display: 'none' }}
-        />
+        <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center">
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileSelect}
+            className="hidden"
+            accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif"
+            disabled={isUploading}
+          />
 
-        {!isUploading ? (
-          <>
-            <div className="upload-icon">📤</div>
-            <div className="upload-text">
-              <h3>Carica Documento</h3>
-              <p>Trascina i file qui o <span className="click-text">clicca per selezionare</span></p>
-              <small>PDF, DOC, TXT, Immagini - Massimo 50MB</small>
-            </div>
-          </>
-        ) : (
-          <div className="upload-progress">
-            <div className="progress-circle">
-              <div className="progress-text">{uploadProgress}%</div>
-            </div>
-            <div className="progress-bar">
-              <div 
-                className="progress-fill" 
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
-            </div>
-          </div>
-        )}
-      </div>
+          {!isUploading ? (
+            <>
+              <div className="rounded-full bg-primary/10 p-4 mb-4">
+                <Upload className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">
+                Trascina i file qui o clicca per selezionare
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                PDF, DOC, TXT, Immagini - Massimo 50MB
+              </p>
+              <Button variant="outline" size="sm">
+                <File className="mr-2 h-4 w-4" />
+                Seleziona File
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="rounded-full bg-blue-50 p-4 mb-4">
+                <Upload className="h-8 w-8 text-blue-600 animate-pulse" />
+              </div>
+              <h3 className="text-lg font-semibold mb-4">
+                Caricamento in corso...
+              </h3>
+              <div className="w-full max-w-xs">
+                <Progress value={uploadProgress} className="h-2" />
+                <p className="text-sm text-muted-foreground mt-2">
+                  {uploadProgress}%
+                </p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
+      {/* Status Messages */}
       {uploadStatus && (
-        <div className={`upload-status ${uploadStatus.includes('❌') ? 'error' : uploadStatus.includes('✅') ? 'success' : 'info'}`}>
-          {uploadStatus}
-        </div>
+        <Alert
+          variant={
+            uploadMutation.isError
+              ? "destructive"
+              : uploadMutation.isSuccess
+                ? "default"
+                : "default"
+          }
+          className={
+            uploadMutation.isSuccess
+              ? "border-green-200 bg-green-50"
+              : uploadMutation.isError
+                ? "border-red-200 bg-red-50"
+                : "border-blue-200 bg-blue-50"
+          }
+        >
+          <div className="flex items-center gap-2">
+            {uploadMutation.isSuccess && (
+              <CheckCircle className="h-4 w-4 text-green-600" />
+            )}
+            {uploadMutation.isError && (
+              <XCircle className="h-4 w-4 text-red-600" />
+            )}
+            <AlertDescription
+              className={
+                uploadMutation.isSuccess
+                  ? "text-green-800"
+                  : uploadMutation.isError
+                    ? "text-red-800"
+                    : "text-blue-800"
+              }
+            >
+              {uploadStatus}
+            </AlertDescription>
+          </div>
+        </Alert>
       )}
     </div>
   );

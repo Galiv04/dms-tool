@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.db.models import User
 from app.db.schemas import UserCreate, UserResponse
 from app.utils.security import hash_password, verify_password, create_access_token
-from app.config import settings
+from app.configurations import settings
 
 
 def create_user(db: Session, user_create: UserCreate) -> User:
