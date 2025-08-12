@@ -1,14 +1,16 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.db.base import get_db
 from app.db.schemas import (
     ApprovalRequestCreate, ApprovalRequestResponse, ApprovalRequestListResponse,
-    ApprovalDecisionRequest, ApprovalDecisionResponse, ApprovalDashboardStats
+    ApprovalDecisionRequest, ApprovalDecisionResponse, ApprovalDashboardStats,
+    UserResponse
 )
-from app.db.models import User, ApprovalStatus
+from app.db.models import User, ApprovalStatus, Document
 from app.services.approval import ApprovalService
 from app.utils.security import get_current_user
 from app.utils.exceptions import NotFoundError, ValidationError, PermissionDeniedError
@@ -27,6 +29,93 @@ def get_client_info(request: Request) -> Dict[str, str]:
         "user_agent": request.headers.get("user-agent")
     }
 
+# ===== ENDPOINTS PER MODAL CREAZIONE APPROVAZIONI =====
+
+@router.get("/users", response_model=List[UserResponse])
+async def get_available_users(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> List[UserResponse]:
+    """
+    Ottieni lista utenti disponibili per assegnare approvazioni
+    Esclude l'utente corrente dalla lista
+    """
+    users = db.query(User).filter(
+        User.id != current_user.id  # Escludi l'utente corrente
+    ).all()
+    return users
+
+@router.get("/documents", response_model=List[dict])
+async def get_user_documents_for_approval(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> List[dict]:
+    """
+    Ottieni documenti dell'utente corrente disponibili per creare approvazioni
+    """
+    documents = db.query(Document).filter(
+        Document.owner_id == current_user.id
+    ).all()
+    
+    return [
+        {
+            "id": doc.id,
+            "filename": doc.original_filename,
+            "content_type": doc.content_type,
+            "size": doc.size,
+            "created_at": doc.created_at.isoformat()
+        }
+        for doc in documents
+    ]
+
+@router.post("/validate", response_model=dict)
+async def validate_approval_data(
+    request_data: ApprovalRequestCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> dict:
+    """
+    Valida i dati per creazione approvazione senza effettivamente crearla
+    Utile per validazione real-time nel frontend
+    """
+    try:
+        # Verifica che il documento esista e appartenga all'utente
+        document = db.query(Document).filter(
+            Document.id == request_data.document_id,
+            Document.owner_id == current_user.id
+        ).first()
+        
+        if not document:
+            return {
+                "valid": False,
+                "errors": ["Document not found or not owned by user"]
+            }
+        
+        # Verifica che le email dei destinatari siano valide (già validato da Pydantic)
+        recipient_emails = [r.recipient_email for r in request_data.recipients]
+        
+        # Verifica duplicati (già validato da Pydantic, ma double-check)
+        if len(recipient_emails) != len(set(recipient_emails)):
+            return {
+                "valid": False, 
+                "errors": ["Duplicate recipient emails found"]
+            }
+        
+        return {
+            "valid": True,
+            "document_name": document.original_filename,
+            "recipient_count": len(request_data.recipients),
+            "approval_type": request_data.approval_type.value
+        }
+        
+    except Exception as e:
+        return {
+            "valid": False,
+            "errors": [f"Validation error: {str(e)}"]
+        }
+
+# ===== ENDPOINTS CORE APPROVAZIONI =====
+
 @router.post("/", response_model=ApprovalRequestResponse, status_code=status.HTTP_201_CREATED)
 async def create_approval_request(
     request_data: ApprovalRequestCreate,
@@ -36,7 +125,6 @@ async def create_approval_request(
 ) -> ApprovalRequestResponse:
     """
     Crea una nuova richiesta di approvazione
-    
     - **document_id**: ID del documento da approvare
     - **title**: Titolo della richiesta
     - **description**: Descrizione opzionale
@@ -47,16 +135,13 @@ async def create_approval_request(
     """
     try:
         client_info = get_client_info(request)
-        
         response = approval_service.create_approval_request(
             request_data=request_data,
             requester_id=current_user.id,
             client_ip=client_info["ip_address"],
             user_agent=client_info["user_agent"]
         )
-        
         return response
-        
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -78,7 +163,6 @@ async def list_approval_requests(
 ) -> List[ApprovalRequestListResponse]:
     """
     Lista le richieste di approvazione dell'utente autenticato
-    
     - **status_filter**: Filtra per stato (pending, approved, rejected, cancelled)
     - **limit**: Numero massimo di risultati (1-100)
     - **offset**: Offset per paginazione
@@ -98,7 +182,6 @@ async def get_approval_request(
 ) -> ApprovalRequestResponse:
     """
     Recupera i dettagli di una richiesta di approvazione specifica
-    
     - **request_id**: ID della richiesta di approvazione
     """
     try:
@@ -106,7 +189,6 @@ async def get_approval_request(
             request_id=request_id,
             user_id=current_user.id
         )
-        
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -118,6 +200,8 @@ async def get_approval_request(
             detail=str(e)
         )
 
+# ===== GESTIONE APPROVAZIONI =====
+
 # Aggiungi schema per il body della cancellazione
 class CancelApprovalRequest(BaseModel):
     reason: Optional[str] = None
@@ -126,27 +210,24 @@ class CancelApprovalRequest(BaseModel):
 async def cancel_approval_request(
     request_id: str,
     request: Request,
-    cancel_data: CancelApprovalRequest = CancelApprovalRequest(),  # ← Body JSON opzionale
+    cancel_data: CancelApprovalRequest = CancelApprovalRequest(),
     current_user: User = Depends(get_current_user),
     approval_service: ApprovalService = Depends(get_approval_service)
 ) -> Dict[str, str]:
     """
     Cancella una richiesta di approvazione (solo se PENDING)
-    
     - **request_id**: ID della richiesta da cancellare
     - **reason**: Motivo opzionale della cancellazione (nel body JSON)
     """
     try:
         client_info = get_client_info(request)
-        
         return approval_service.cancel_approval_request(
             request_id=request_id,
             user_id=current_user.id,
-            reason=cancel_data.reason,  # ← Usa reason dal body
+            reason=cancel_data.reason,
             client_ip=client_info["ip_address"],
             user_agent=client_info["user_agent"]
         )
-        
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -173,14 +254,12 @@ async def process_approval_decision(
     """
     Processa una decisione di approvazione tramite token
     QUESTO ENDPOINT NON RICHIEDE AUTENTICAZIONE (token-based)
-    
     - **approval_token**: Token univoco del destinatario
     - **decision**: "approved" o "rejected"
     - **comments**: Commenti opzionali sulla decisione
     """
     try:
         client_info = get_client_info(request)
-        
         result = approval_service.process_approval_decision(
             approval_token=approval_token,
             decision_data=decision_data,
@@ -195,7 +274,6 @@ async def process_approval_decision(
             approval_request_status=result["approval_request_status"],
             completed=result["completed"]
         )
-        
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -207,6 +285,8 @@ async def process_approval_decision(
             detail=str(e)
         )
 
+# ===== DASHBOARD E STATISTICHE =====
+
 @router.get("/dashboard/pending")
 async def get_pending_approvals_dashboard(
     email: str = Query(..., description="Email del destinatario"),
@@ -215,7 +295,6 @@ async def get_pending_approvals_dashboard(
     """
     Dashboard per destinatari: recupera tutte le approvazioni pending per un email
     QUESTO ENDPOINT NON RICHIEDE AUTENTICAZIONE (per link email)
-    
     - **email**: Email del destinatario per cui recuperare le approvazioni pending
     """
     return approval_service.get_pending_approvals_for_email(email)
@@ -227,7 +306,6 @@ async def get_approval_statistics(
 ) -> ApprovalDashboardStats:
     """
     Statistiche dashboard approvazioni per l'utente autenticato
-    
     Restituisce contatori per:
     - Richieste create dall'utente (per stato)
     - Approvazioni pending per l'utente come destinatario
@@ -248,6 +326,8 @@ async def get_approval_statistics(
         my_pending_approvals=stats.get("pending_as_recipient", 0)
     )
 
+# ===== UTILITY E INFO =====
+
 @router.get("/token/{approval_token}/info")
 async def get_approval_token_info(
     approval_token: str,
@@ -257,13 +337,11 @@ async def get_approval_token_info(
     Recupera informazioni su un token di approvazione senza processare decisioni
     Utile per preview prima della decisione
     QUESTO ENDPOINT NON RICHIEDE AUTENTICAZIONE
-    
     - **approval_token**: Token di approvazione da verificare
     """
     try:
         # Utilizza metodo interno del service per ottenere info del token
         from app.db.models import ApprovalRecipient
-        from datetime import datetime
         
         recipient = approval_service.db.query(ApprovalRecipient).filter(
             ApprovalRecipient.approval_token == approval_token
@@ -310,7 +388,6 @@ async def get_approval_token_info(
                 "comments": recipient.comments
             }
         }
-        
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -326,7 +403,6 @@ async def get_approval_audit_trail(
     """
     Recupera l'audit trail completo di una richiesta di approvazione
     Solo per il richiedente o amministratori
-    
     - **request_id**: ID della richiesta di approvazione
     """
     try:
@@ -355,7 +431,6 @@ async def get_approval_audit_trail(
             }
             for log in audit_logs
         ]
-        
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

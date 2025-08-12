@@ -8,6 +8,7 @@ import Documents from './components/Documents'
 import ProtectedRoute from './components/ProtectedRoute'
 import ApprovalDashboard from './pages/ApprovalDashboard'
 import AppLayout from './components/layout/AppLayout'
+import { Toaster } from '@/components/ui/toaster'
 
 function App() {
   const { isAuthenticated, loading } = useAuth()
@@ -150,6 +151,7 @@ function App() {
           element={<Navigate to="/" replace />} 
         />
       </Routes>
+      <Toaster />
     </AppLayout>
   )
 }
