@@ -1,82 +1,101 @@
 // src/components/DocumentList.jsx
-import React, { useState } from 'react'
-import { useDocuments, useDeleteDocument, useDownloadDocument } from '../hooks/useDocuments'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { 
-  FileText, 
-  Download, 
-  Trash2, 
-  RefreshCw, 
+import React, { useState } from "react";
+import {
+  useDocuments,
+  useDeleteDocument,
+  useDownloadDocument,
+} from "../hooks/useDocuments";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  FileText,
+  Download,
+  Trash2,
+  RefreshCw,
   AlertCircle,
   File,
   Image,
   FileSpreadsheet,
-  Loader2
-} from 'lucide-react'
+  Loader2,
+} from "lucide-react";
 
 const DocumentList = ({ filters = {} }) => {
-  const [selectedDocument, setSelectedDocument] = useState(null)
-  
+  const [selectedDocument, setSelectedDocument] = useState(null);
+
   // React Query hooks
-  const { 
-    data: documents, 
-    isLoading, 
-    error, 
+  const {
+    data: documents,
+    isLoading,
+    error,
     refetch,
-    isFetching 
-  } = useDocuments(filters)
-  
-  const deleteMutation = useDeleteDocument()
-  const downloadMutation = useDownloadDocument()
+    isFetching,
+  } = useDocuments(filters);
+
+  if (documents && documents.length > 0) {
+    documents.forEach((doc, idx) => {
+      if (idx === 0) console.log("🔍 DEBUG Primo Document Object:", doc);
+    });
+  }
+
+  const deleteMutation = useDeleteDocument();
+  const downloadMutation = useDownloadDocument();
 
   const handleDelete = async (document) => {
-    if (window.confirm(`Sei sicuro di voler eliminare "${document.filename}"?`)) {
-      try {
-        await deleteMutation.mutateAsync(document.id)
-      } catch (error) {
-        alert(`Errore nell'eliminazione: ${error.message}`)
-      }
-    }
-  }
 
-  const handleDownload = async (document) => {
-    try {
-      await downloadMutation.mutateAsync({
-        documentId: document.id,
-        filename: document.filename
-      })
-    } catch (error) {
-      alert(`Errore nel download: ${error.message}`)
+    const documentName =
+      document.original_filename || document.filename || "documento senza nome";
+
+    if (window.confirm(`Sei sicuro di voler eliminare "${documentName}"?`)) {
+      deleteMutation.mutate(document.id);
     }
-  }
+  };
+
+const handleDownload = async (document) => {
+  // 🔧 FIX: Usa il filename corretto
+  const filename = document.original_filename || document.filename || 'documento';
+    
+  downloadMutation.mutate({
+    documentId: document.id,
+    filename: filename, // 🔧 Usa la variabile invece di accessing property
+  });
+};
 
   const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
+    // console.log('🔍 formatFileSize input:', bytes, typeof bytes);
+    if (bytes === 0) return "0 Bytes";
+    if (!bytes || isNaN(bytes)) return "Dimensione non disponibile";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('it-IT', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
+    return new Date(dateString).toLocaleDateString("it-IT", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   const getFileIcon = (contentType) => {
-    if (contentType?.includes('pdf')) return <FileText className="h-5 w-5 text-red-500" />
-    if (contentType?.includes('image')) return <Image className="h-5 w-5 text-green-500" />
-    if (contentType?.includes('spreadsheet') || contentType?.includes('excel')) return <FileSpreadsheet className="h-5 w-5 text-green-600" />
-    return <File className="h-5 w-5 text-blue-500" />
-  }
+    if (contentType?.includes("pdf"))
+      return <FileText className="h-5 w-5 text-red-500" />;
+    if (contentType?.includes("image"))
+      return <Image className="h-5 w-5 text-green-500" />;
+    if (contentType?.includes("spreadsheet") || contentType?.includes("excel"))
+      return <FileSpreadsheet className="h-5 w-5 text-green-600" />;
+    return <File className="h-5 w-5 text-blue-500" />;
+  };
 
   if (isLoading) {
     return (
@@ -84,7 +103,7 @@ const DocumentList = ({ filters = {} }) => {
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
         <p className="text-muted-foreground">Caricamento documenti...</p>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -93,21 +112,24 @@ const DocumentList = ({ filters = {} }) => {
         <AlertCircle className="h-4 w-4" />
         <AlertDescription className="flex items-center justify-between">
           <span>Errore nel caricamento dei documenti: {error.message}</span>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => refetch()}
             disabled={isFetching}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`}
+            />
             Riprova
           </Button>
         </AlertDescription>
       </Alert>
-    )
+    );
   }
 
   if (!documents || documents.length === 0) {
+
     return (
       <div className="text-center py-12">
         <div className="rounded-full bg-muted/50 w-16 h-16 flex items-center justify-center mx-auto mb-4">
@@ -118,7 +140,7 @@ const DocumentList = ({ filters = {} }) => {
           Carica il tuo primo documento per iniziare
         </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -133,13 +155,15 @@ const DocumentList = ({ filters = {} }) => {
             Gestisci i tuoi file caricati
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => refetch()}
           disabled={isFetching}
         >
-          <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+          <RefreshCw
+            className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`}
+          />
           Aggiorna
         </Button>
       </div>
@@ -147,10 +171,10 @@ const DocumentList = ({ filters = {} }) => {
       {/* Documents Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {documents.map((doc) => (
-          <Card 
-            key={doc.id} 
+          <Card
+            key={doc.id}
             className={`cursor-pointer transition-all hover:shadow-md ${
-              selectedDocument?.id === doc.id ? 'ring-2 ring-primary' : ''
+              selectedDocument?.id === doc.id ? "ring-2 ring-primary" : ""
             }`}
             onClick={() => setSelectedDocument(doc)}
           >
@@ -159,7 +183,10 @@ const DocumentList = ({ filters = {} }) => {
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   {getFileIcon(doc.content_type)}
                   <div className="min-w-0 flex-1">
-                    <CardTitle className="text-sm truncate" title={doc.filename}>
+                    <CardTitle
+                      className="text-sm truncate"
+                      title={doc.filename}
+                    >
                       {doc.filename}
                     </CardTitle>
                     <CardDescription className="text-xs">
@@ -169,12 +196,13 @@ const DocumentList = ({ filters = {} }) => {
                 </div>
               </div>
             </CardHeader>
-            
+
             <CardContent className="pt-0">
+              {/* {console.log('🔍 DEBUG Document Content:', doc)} */}
               <div className="space-y-3">
                 {/* File Info */}
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{formatFileSize(doc.file_size)}</span>
+                  <span>{formatFileSize(doc.size)}</span>
                   <span>{formatDate(doc.created_at)}</span>
                 </div>
 
@@ -183,34 +211,26 @@ const DocumentList = ({ filters = {} }) => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDownload(doc)
-                    }}
+                    onClick={() => handleDownload(doc)}
                     disabled={downloadMutation.isPending}
-                    className="flex-1"
                   >
                     {downloadMutation.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Download className="h-3 w-3" />
+                      <Download className="h-4 w-4" />
                     )}
                   </Button>
-                  
+
                   <Button
-                    variant="outline"
+                    variant="destructive"
                     size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDelete(doc)
-                    }}
+                    onClick={() => handleDelete(doc)}
                     disabled={deleteMutation.isPending}
-                    className="flex-1 text-destructive hover:text-destructive"
                   >
                     {deleteMutation.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="h-4 w-4" />
                     )}
                   </Button>
                 </div>
@@ -220,7 +240,7 @@ const DocumentList = ({ filters = {} }) => {
         ))}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default DocumentList
+export default DocumentList;

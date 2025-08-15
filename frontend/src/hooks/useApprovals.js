@@ -85,7 +85,12 @@ const approvalsApi = {
   getAuditTrail: async (requestId) => {
     const response = await apiClient.get(`/approvals/audit/${requestId}`)
     return response.data
-  }
+  },
+
+  deleteApproval: async (approvalId) => {
+    const response = await apiClient.delete(`/approvals/${approvalId}`)
+    return response.data
+  },
 }
 
 // Hook per lista approvazioni con filtri
@@ -194,5 +199,22 @@ export const useAuditTrail = (requestId) => {
     queryFn: () => approvalsApi.getAuditTrail(requestId),
     enabled: !!requestId,
     staleTime: 60 * 1000,
+  })
+}
+
+// ✅ Hook per eliminazione approvazione
+export const useDeleteApproval = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (approvalId) => approvalsApi.deleteApproval(approvalId),
+    onSuccess: () => {
+      // Invalida tutte le query correlate
+      queryClient.invalidateQueries({ queryKey: ['approvals'] })
+      queryClient.invalidateQueries({ queryKey: ['approval-stats'] })
+    },
+    onError: (error) => {
+      console.error('Delete approval failed:', error)
+    }
   })
 }

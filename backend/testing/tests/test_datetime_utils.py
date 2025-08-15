@@ -26,7 +26,7 @@ class TestDateTimeUtils:
         """Test formatazione datetime per API"""
         dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
         formatted = format_datetime_for_api(dt)
-        assert formatted == "2024-01-15T10:30:00+00:00"
+        assert formatted == "2024-01-15T10:30:00Z"
         
         # Test con None
         assert format_datetime_for_api(None) is None

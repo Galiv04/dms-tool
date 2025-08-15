@@ -1,0 +1,38 @@
+<!-- backend/templates/email/approval_reminder.html -->
+<h1>⏰ Reminder Approvazione</h1>
+
+<p>Ciao <strong>{{ recipient_name }}</strong>,</p>
+
+<div class="info-box warning-box">
+    <p><strong>⚠️ Richiesta in scadenza:</strong> {{ title }}</p>
+    {% if days_left is defined %}
+        {% if days_left <= 1 %}
+        <p style="color: #dc3545; font-weight: bold;">🚨 Scade tra {{ days_left }} giorno/i</p>
+        {% else %}
+        <p>Scade tra {{ days_left }} giorni</p>
+        {% endif %}
+    {% endif %}
+    {% if expires_at %}
+    <p><strong>Data scadenza:</strong> {{ expires_at }}</p>
+    {% endif %}
+</div>
+
+<table role="presentation" border="0" cellpadding="0" cellspacing="0" class="btn btn-success">
+    <tbody>
+        <tr>
+            <td align="center">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                    <tbody>
+                        <tr>
+                            <td><a href="{{ approval_url }}" target="_blank">✅ Rispondi Ora</a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<p style="color: #856404; background: #fff3cd; padding: 12px; border-radius: 4px;">
+    <strong>Importante:</strong> Se non rispondi entro la scadenza, la richiesta verrà automaticamente rifiutata.
+</p>

@@ -1,0 +1,28 @@
+<!-- backend/templates/email/approval_completion.html -->
+{% if final_status == 'approved' %}
+<h1>✅ Approvazione Completata</h1>
+<div class="info-box success-box">
+{% elif final_status == 'rejected' %}
+<h1>❌ Approvazione Rifiutata</h1>
+<div class="info-box danger-box">
+{% else %}
+<h1>🔄 Approvazione Completata</h1>
+<div class="info-box">
+{% endif %}
+
+<p>Ciao <strong>{{ requester_name }}</strong>,</p>
+
+<p>La tua richiesta di approvazione <strong>"{{ title }}"</strong> è stata completata con stato: <strong>{{ final_status.upper() }}</strong>.</p>
+
+    <h2>📊 Risultati Finali</h2>
+    <p><strong>Approvazioni ricevute:</strong> {{ approved_count }}/{{ total_recipients }}</p>
+    {% if rejected_count > 0 %}
+    <p><strong>Rifiuti:</strong> {{ rejected_count }}</p>
+    {% endif %}
+    <p><strong>Documento:</strong> {{ document_filename }}</p>
+    {% if completed_at %}
+    <p><strong>Completata il:</strong> {{ completed_at }}</p>
+    {% endif %}
+</div>
+
+<p>Puoi visualizzare tutti i dettagli nella tua dashboard delle approvazioni.</p>

@@ -16,6 +16,7 @@ from app.utils.security import get_current_user
 from app.utils.exceptions import NotFoundError, ValidationError, PermissionDeniedError
 from pydantic import BaseModel
 
+
 router = APIRouter(prefix="/approvals", tags=["approvals"])
 
 def get_approval_service(db: Session = Depends(get_db)) -> ApprovalService:
@@ -441,3 +442,31 @@ async def get_approval_audit_trail(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e)
         )
+
+@router.delete("/{approval_id}", response_model=Dict[str, str])
+def delete_approval_request(
+    approval_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    request: Request = None
+):
+    """
+    Elimina una richiesta di approvazione
+    Solo il richiedente può eliminare le proprie richieste PENDING
+    """
+    approval_service = ApprovalService(db)
+    
+    try:
+        result = approval_service.delete_approval_request(
+            approval_id, 
+            current_user.id,
+            request.client.host if request and hasattr(request, 'client') else None
+        )
+        return result
+        
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    except PermissionDeniedError:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this approval request")
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))

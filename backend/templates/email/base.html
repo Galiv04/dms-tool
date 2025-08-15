@@ -1,0 +1,83 @@
+<!-- backend/templates/email/base_simple.html -->
+<!doctype html>
+<html lang="it">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>{{ title | default('Document Management System') }}</title>
+    <style media="all" type="text/css">
+    /* Reset globali */
+    body { font-family: Helvetica, sans-serif; -webkit-font-smoothing: antialiased; font-size: 16px; line-height: 1.3; margin: 0; padding: 0; background-color: #f4f5f6; }
+    table { border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%; }
+    table td { font-family: Helvetica, sans-serif; font-size: 16px; vertical-align: top; }
+    
+    /* Container */
+    .container { margin: 0 auto !important; max-width: 600px; padding: 24px 0; width: 600px; }
+    .content { box-sizing: border-box; display: block; margin: 0 auto; max-width: 600px; padding: 0; }
+    .main { background: #ffffff; border: 1px solid #eaebed; border-radius: 16px; width: 100%; }
+    .wrapper { box-sizing: border-box; padding: 24px; }
+    
+    /* Typography */
+    p { font-family: Helvetica, sans-serif; font-size: 16px; font-weight: normal; margin: 0; margin-bottom: 16px; }
+    h1 { font-size: 24px; font-weight: 600; margin: 0 0 16px 0; color: #333; }
+    h2 { font-size: 20px; font-weight: 500; margin: 0 0 12px 0; color: #555; }
+    
+    /* Buttons */
+    .btn { box-sizing: border-box; min-width: 100% !important; width: 100%; margin: 16px 0; }
+    .btn table { width: auto; margin: 0 auto; }
+    .btn table td { background-color: #0867ec; border-radius: 6px; text-align: center; }
+    .btn a { background-color: #0867ec; border: solid 2px #0867ec; border-radius: 6px; box-sizing: border-box; color: #ffffff; cursor: pointer; display: inline-block; font-size: 16px; font-weight: bold; margin: 0; padding: 12px 24px; text-decoration: none; }
+    .btn-success table td { background-color: #28a745; }
+    .btn-success a { background-color: #28a745; border-color: #28a745; }
+    .btn-danger table td { background-color: #dc3545; }
+    .btn-danger a { background-color: #dc3545; border-color: #dc3545; }
+    
+    /* Info box */
+    .info-box { background: #f8f9fa; border-left: 4px solid #0867ec; padding: 16px; margin: 16px 0; border-radius: 4px; }
+    .success-box { border-left-color: #28a745; }
+    .warning-box { border-left-color: #ffc107; background: #fff3cd; }
+    .danger-box { border-left-color: #dc3545; background: #f8d7da; }
+    
+    /* Footer */
+    .footer { clear: both; padding-top: 24px; text-align: center; width: 100%; }
+    .footer td, .footer p { color: #9a9ea6; font-size: 14px; text-align: center; }
+    
+    /* Mobile */
+    @media only screen and (max-width: 640px) {
+        .container { padding: 8px !important; width: 100% !important; }
+        .wrapper { padding: 16px !important; }
+        .btn a { font-size: 16px !important; width: 100% !important; }
+    }
+    </style>
+</head>
+<body>
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; background-color: #f4f5f6;">
+        <tr>
+            <td>&nbsp;</td>
+            <td class="container">
+                <div class="content">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="main">
+                        <tr>
+                            <td class="wrapper">
+                                {{ content }}
+                            </td>
+                        </tr>
+                    </table>
+                    
+                    <div class="footer">
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                            <tr>
+                                <td>
+                                    <p>{{ app_name | default('Document Management System') }}</p>
+                                    <p style="font-size: 12px;">Email automatica di sistema</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </td>
+            <td>&nbsp;</td>
+        </tr>
+    </table>
+</body>
+</html>

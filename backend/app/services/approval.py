@@ -19,6 +19,7 @@ from app.services.email import EmailService
 from datetime import datetime, timezone, timedelta
 from app.utils.datetime_utils import format_datetime_for_api, get_utc_now, ensure_utc
 
+
 class ApprovalService:
     """Service per la gestione completa del workflow di approvazione"""
 
@@ -40,7 +41,7 @@ class ApprovalService:
             Document.id == request_data.document_id,
             Document.owner_id == requester_id
         ).first()
-        
+
         if not document:
             raise NotFoundError(
                 f"Documento {request_data.document_id} non trovato o non autorizzato")
@@ -50,7 +51,7 @@ class ApprovalService:
             ApprovalRequest.document_id == request_data.document_id,
             ApprovalRequest.status == ApprovalStatus.PENDING
         ).first()
-        
+
         if existing_pending:
             raise ValidationError(
                 f"Esiste già una richiesta di approvazione in corso per questo documento"
@@ -63,7 +64,8 @@ class ApprovalService:
             title=request_data.title,
             description=request_data.description,
             approval_type=request_data.approval_type,
-            expires_at=ensure_utc(request_data.expires_at) if request_data.expires_at else None,
+            expires_at=ensure_utc(
+                request_data.expires_at) if request_data.expires_at else None,
             requester_comments=request_data.requester_comments
         )
 
@@ -78,7 +80,8 @@ class ApprovalService:
                 approval_request_id=approval_request.id,
                 recipient_email=recipient_data.recipient_email,
                 recipient_name=recipient_data.recipient_name,
-                expires_at=ensure_utc(request_data.expires_at) if request_data.expires_at else None
+                expires_at=ensure_utc(
+                    request_data.expires_at) if request_data.expires_at else None
             )
             recipients.append(recipient)
 
@@ -136,7 +139,7 @@ class ApprovalService:
         recipient = self.db.query(ApprovalRecipient).filter(
             ApprovalRecipient.approval_token == approval_token
         ).first()
-        
+
         if not recipient:
             raise NotFoundError("Token di approvazione non valido")
 
@@ -145,16 +148,16 @@ class ApprovalService:
             # Fix robusto per timezone comparison
             expires_dt = recipient.expires_at
             current_dt = get_utc_now()
-            
+
             # Se expires_dt è naive, assumilo come UTC
             if expires_dt.tzinfo is None:
                 expires_utc = expires_dt.replace(tzinfo=timezone.utc)
             else:
                 expires_utc = expires_dt.astimezone(timezone.utc)
-            
+
             # current_dt è già UTC da get_utc_now()
             current_utc = current_dt
-            
+
             if expires_utc < current_utc:
                 recipient.status = RecipientStatus.EXPIRED
                 self.db.commit()
@@ -199,7 +202,8 @@ class ApprovalService:
         )
 
         # Controlla se la richiesta è completata e aggiorna lo stato
-        final_status, completion_reason = self._evaluate_approval_request_status(approval_request)
+        final_status, completion_reason = self._evaluate_approval_request_status(
+            approval_request)
 
         response_data = {
             "message": f"Decisione '{decision_data.decision}' registrata con successo",
@@ -223,7 +227,7 @@ class ApprovalService:
         approval_request = self.db.query(ApprovalRequest).filter(
             ApprovalRequest.id == request_id
         ).first()
-        
+
         if not approval_request:
             raise NotFoundError(
                 f"Richiesta di approvazione {request_id} non trovata")
@@ -242,12 +246,18 @@ class ApprovalService:
         limit: int = 50,
         offset: int = 0
     ) -> List[ApprovalRequestListResponse]:
-        """
-        Lista le richieste di approvazione dell'utente
-        """
-        query = self.db.query(ApprovalRequest).filter(
-            ApprovalRequest.requester_id == user_id
-        )
+        """Lista le richieste di approvazione dell'utente"""
+        
+        # 🔧 FIX: Aggiungi joinedload per includere tutti i dati necessari
+        from sqlalchemy.orm import joinedload
+        
+        query = self.db.query(ApprovalRequest)\
+            .options(
+                joinedload(ApprovalRequest.requester),
+                joinedload(ApprovalRequest.document),      # ← AGGIUNGI per documento
+                joinedload(ApprovalRequest.recipients)     # ← AGGIUNGI per recipients
+            )\
+            .filter(ApprovalRequest.requester_id == user_id)
 
         if status_filter:
             query = query.filter(ApprovalRequest.status == status_filter)
@@ -257,19 +267,57 @@ class ApprovalService:
 
         requests = query.all()
 
-        # Aggiungi contatori per ogni richiesta
+        # 🔧 FIX: Costruisci la risposta con tutti i dati
         result = []
         for req in requests:
-            req_data = ApprovalRequestListResponse.model_validate(req)
-            
-            # Calcola contatori
             recipients = req.recipients
-            req_data.recipient_count = len(recipients)
-            req_data.approved_count = len(
-                [r for r in recipients if r.status == RecipientStatus.APPROVED])
-            req_data.pending_count = len(
-                [r for r in recipients if r.status == RecipientStatus.PENDING])
-
+            approved_count = len([r for r in recipients if r.status == RecipientStatus.APPROVED])
+            pending_count = len([r for r in recipients if r.status == RecipientStatus.PENDING])
+            
+            # 🔧 Costruisci il dizionario con tutti i dati necessari
+            req_dict = {
+                "id": req.id,
+                "document_id": req.document_id,
+                "title": req.title,
+                "approval_type": req.approval_type,
+                "status": req.status,
+                "created_at": req.created_at,
+                "expires_at": req.expires_at,
+                "requester_id": req.requester_id,
+                "recipient_count": len(recipients),
+                "approved_count": approved_count,
+                "pending_count": pending_count
+            }
+            
+            # 🔧 Aggiungi dati requester
+            if req.requester:
+                req_dict["requester"] = {
+                    "id": req.requester.id,
+                    "email": req.requester.email,
+                    "display_name": req.requester.display_name
+                }
+            
+            # 🔧 AGGIUNGI dati documento
+            if req.document:
+                req_dict["document"] = {
+                    "id": req.document.id,
+                    "filename": req.document.filename,
+                    "original_filename": req.document.original_filename
+                }
+            
+            # 🔧 AGGIUNGI dati recipients
+            if recipients:
+                req_dict["recipients"] = [
+                    {
+                        "id": r.id,
+                        "recipient_email": r.recipient_email,
+                        "recipient_name": r.recipient_name,
+                        "status": r.status
+                    }
+                    for r in recipients
+                ]
+            
+            req_data = ApprovalRequestListResponse.model_validate(req_dict)
             result.append(req_data)
 
         return result
@@ -288,7 +336,7 @@ class ApprovalService:
         approval_request = self.db.query(ApprovalRequest).filter(
             ApprovalRequest.id == request_id
         ).first()
-        
+
         if not approval_request:
             raise NotFoundError(
                 f"Richiesta di approvazione {request_id} non trovata")
@@ -373,8 +421,10 @@ class ApprovalService:
                 "document_filename": document.original_filename,
                 "document_id": document.id,
                 "approval_type": request.approval_type.value,
-                "created_at": format_datetime_for_api(request.created_at),  # 🔧 FIX: format_datetime_for_api
-                "expires_at": format_datetime_for_api(recipient.expires_at),  # 🔧 FIX: format_datetime_for_api
+                # 🔧 FIX: format_datetime_for_api
+                "created_at": format_datetime_for_api(request.created_at),
+                # 🔧 FIX: format_datetime_for_api
+                "expires_at": format_datetime_for_api(recipient.expires_at),
                 "approval_token": recipient.approval_token,
                 "recipient_name": recipient.recipient_name,
                 "requester_comments": request.requester_comments
@@ -402,7 +452,8 @@ class ApprovalService:
                     )
             except Exception as e:
                 self.db.rollback()
-                print(f"Warning: Errore durante aggiornamento recipients scaduti: {e}")
+                print(
+                    f"Warning: Errore durante aggiornamento recipients scaduti: {e}")
 
         return results
 
@@ -560,7 +611,7 @@ class ApprovalService:
             try:
                 # Invia email ai destinatari
                 email_service = EmailService()
-                
+
                 # Recupera la richiesta dal database per avere tutte le relazioni
                 approval_request = self.db.query(ApprovalRequest).filter(
                     ApprovalRequest.id == approval_response.id
@@ -597,3 +648,68 @@ class ApprovalService:
                 )
 
         return approval_response, email_results
+
+    def delete_approval_request(
+        self,
+        request_id: str,
+        user_id: int,
+        client_ip: str = None
+    ) -> Dict[str, str]:
+        """
+        Elimina definitivamente una richiesta di approvazione
+        
+        Args:
+            request_id: ID della richiesta
+            user_id: ID dell'utente (deve essere il richiedente)
+            client_ip: IP per audit
+            
+        Returns:
+            Dict con messaggio di conferma
+            
+        Raises:
+            NotFoundError: Se la richiesta non esiste
+            PermissionDeniedError: Se l'utente non è il richiedente
+            ValidationError: Se la richiesta non può essere eliminata
+        """
+        approval_request = self.db.query(ApprovalRequest).filter(
+            ApprovalRequest.id == request_id
+        ).first()
+        
+        if not approval_request:
+            raise NotFoundError(f"Richiesta di approvazione {request_id} non trovata")
+        
+        if approval_request.requester_id != user_id:
+            raise PermissionDeniedError("Non sei autorizzato a eliminare questa richiesta")
+        
+        if approval_request.status != ApprovalStatus.PENDING:
+            raise ValidationError(
+                f"Non è possibile eliminare una richiesta in stato {approval_request.status.value}"
+            )
+        
+        # Audit log prima dell'eliminazione
+        self._create_audit_log(
+            approval_request_id=approval_request.id,
+            user_id=user_id,
+            action="approval_request_deleted",
+            details=f"Richiesta di approvazione '{approval_request.title}' eliminata dal richiedente",
+            metadata={
+                "title": approval_request.title,
+                "document_filename": approval_request.document.original_filename if approval_request.document else None,
+                "recipients_count": len(approval_request.recipients),
+                "deletion_reason": "user_requested"
+            },
+            ip_address=client_ip
+        )
+        
+        # Salva il titolo prima dell'eliminazione
+        title = approval_request.title
+        
+        # Elimina la richiesta (CASCADE eliminerà automaticamente recipients e audit logs)
+        self.db.delete(approval_request)
+        self.db.commit()
+        
+        return {
+            "message": f"Richiesta di approvazione '{title}' eliminata con successo",
+            "request_id": request_id,
+            "status": "deleted"
+        }

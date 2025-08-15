@@ -171,6 +171,31 @@ class ApprovalRequestResponse(BaseModel):
     requester_comments: Optional[str]
     recipients: List[ApprovalRecipientResponse] = []
 
+class RequesterInfo(BaseModel):
+    """Info base del richiedente per ApprovalRequestListResponse"""
+    id: int
+    email: str
+    display_name: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class DocumentInfo(BaseModel):
+    """Info base del documento per ApprovalRequestListResponse"""
+    id: str
+    filename: str
+    original_filename: str
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class RecipientInfo(BaseModel):
+    """Info base del recipient per ApprovalRequestListResponse"""
+    id: str
+    recipient_email: str
+    recipient_name: Optional[str] = None
+    status: RecipientStatus
+    
+    model_config = ConfigDict(from_attributes=True)
+    
 class ApprovalRequestListResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
@@ -182,7 +207,14 @@ class ApprovalRequestListResponse(BaseModel):
     created_at: datetime
     expires_at: Optional[datetime]
     
-    # Campi calcolati (da aggiungere nella risposta API)
+    # Dati richiedente
+    requester_id: int
+    requester: Optional[RequesterInfo] = None
+    
+    # dati documento e recipients
+    document: Optional[DocumentInfo] = None
+    recipients: Optional[List[RecipientInfo]] = None
+    
     recipient_count: Optional[int] = None
     approved_count: Optional[int] = None
     pending_count: Optional[int] = None
@@ -286,3 +318,4 @@ class BulkApprovalAction(BaseModel):
         if len(v) > 10:
             raise ValueError('Massimo 10 richieste per operazione bulk')
         return v
+

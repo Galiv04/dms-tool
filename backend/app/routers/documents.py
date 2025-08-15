@@ -12,6 +12,10 @@ from app.db.models import User
 from app.services.documents import document_service
 import os
 from pathlib import Path
+from app.utils.exceptions import ValidationError, NotFoundError
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -138,13 +142,26 @@ async def delete_document(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Elimina un documento"""
-    success = document_service.delete_document(db, document_id, current_user)
-    
-    if not success:
+    logger.info(f"Chiamata DELETE documento: {document_id} utente: {getattr(current_user, 'id', None)}")
+    try:
+        success = document_service.delete_document(db, document_id, current_user)
+        logger.info(f"Delete risultato: {success}")
+        if not success:
+            logger.warning("Documento non trovato o non eliminabile")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Documento non trovato"
+            )
+        return {"message": "Documento eliminato con successo"}
+    except ValidationError as e:
+        logger.warning(f"Validation error: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Documento non trovato"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
         )
-    
-    return {"message": "Documento eliminato con successo"}
+    except Exception as e:
+        logger.error(f"Errore imprevisto: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Errore durante l'eliminazione: {str(e)}"
+        )

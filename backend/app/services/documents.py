@@ -83,15 +83,35 @@ class DocumentService:
         Recupera tutti i documenti dell'utente
         """
         return db.query(Document).filter(Document.owner_id == user.id).order_by(Document.created_at.desc()).all()
-    
+
     def delete_document(self, db: Session, document_id: str, user: User) -> bool:
         """
-        Elimina documento se l'utente ha i permessi
+        Elimina documento se l'utente ha i permessi e non ci sono approvazioni attive
         """
         document = self.get_document(db, document_id, user)
         if not document:
             return False
+
+        from app.db.models import ApprovalRequest, ApprovalStatus
         
+        # Controlla se ci sono richieste di approvazione attive
+        active_approval = db.query(ApprovalRequest).filter(
+            ApprovalRequest.document_id == document_id,
+            ApprovalRequest.status.in_([
+                ApprovalStatus.PENDING,
+                ApprovalStatus.APPROVED  # Anche approved per mantenere tracciabilità
+            ])
+        ).first()
+        
+        # Se c'è una approvazione attiva, solleva eccezione
+        if active_approval:
+            from app.utils.exceptions import ValidationError  # ← Import tuo esistente
+            raise ValidationError(
+                f"Impossibile eliminare il documento. "
+                f"Esiste una richiesta di approvazione in stato '{active_approval.status.value}'. "
+                f"Elimina prima la richiesta di approvazione."
+            )
+
         # Elimina file fisico
         file_deleted = self.storage.delete_file(document_id)
         
@@ -100,7 +120,7 @@ class DocumentService:
         db.commit()
         
         return file_deleted
-    
+
     def get_file_path(self, document: Document):
         """
         Ottieni il path fisico del file
