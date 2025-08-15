@@ -14,6 +14,7 @@ from app.db.models import (
 )
 from app.utils.security import hash_password
 from app.utils.exceptions import NotFoundError, ValidationError, PermissionDeniedError
+from app.utils.datetime_utils import get_utc_now
 
 @pytest.mark.db
 class TestApprovalService:
@@ -271,15 +272,15 @@ class TestApprovalService:
     
     def test_process_approval_decision_expired_token(self, approval_service, sample_user_and_document, db_session):
         """Test decisione con token scaduto"""
-        user, document = sample_user_and_document
+        from app.utils.datetime_utils import get_utc_now
         
+        user, document = sample_user_and_document
         unique_id = str(uuid.uuid4())[:8]
         
-        # ✅ Fix: Prima crea la richiesta con data futura, poi modifica manualmente la scadenza nel DB
         request_data = ApprovalRequestCreate(
             document_id=document.id,
             title="Expired Request",
-            expires_at=datetime.now() + timedelta(days=7),  # ✅ Inizia con data futura valida
+            expires_at=get_utc_now() + timedelta(days=7),  # 🔧 USA UTC invece di datetime.now()
             recipients=[
                 ApprovalRecipientCreate(recipient_email=f"expired_{unique_id}@test.com")
             ]
@@ -290,35 +291,32 @@ class TestApprovalService:
             requester_id=user.id
         )
         
-        # ✅ Usa la stessa sessione del test invece di crearne una nuova
         recipient = db_session.query(ApprovalRecipient).filter(
             ApprovalRecipient.approval_token == response.recipients[0].approval_token
         ).first()
         
-        # ✅ Verifica che il recipient sia stato trovato
-        assert recipient is not None, f"Recipient non trovato con token {response.recipients[0].approval_token}"
+        assert recipient is not None, f"Recipient non trovato"
         
-        # ✅ Ora modifica la scadenza nel passato
-        recipient.expires_at = datetime.now() - timedelta(hours=1)
+        # 🔧 FIX: Usa UTC per impostare scadenza nel passato
+        recipient.expires_at = get_utc_now() - timedelta(hours=1)  # UTC invece di datetime.now()
         db_session.commit()
         
-        # ✅ Test della decisione con token scaduto
         approval_token = response.recipients[0].approval_token
-        
         decision_data = ApprovalDecisionRequest(
             decision="approved",
             comments="Too late"
         )
         
+        # Ora dovrebbe sollevare ValidationError
         with pytest.raises(ValidationError) as exc_info:
             approval_service.process_approval_decision(
                 approval_token=approval_token,
                 decision_data=decision_data
             )
         
-        assert "è scaduto" in str(exc_info.value)
+        # Verifica il messaggio di errore
+        assert "scaduto" in str(exc_info.value).lower()
 
-    
     def test_get_approval_request_success(self, approval_service, sample_user_and_document):
         """Test recupero richiesta approvazione"""
         user, document = sample_user_and_document

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Plus, Filter, RefreshCw, Loader2, AlertCircle } from 'lucide-react'
+import { formatLocalDateTime, getRelativeTime } from '../utils/dateUtils'
 
 const ApprovalDashboard = () => {
   const { user } = useAuth()

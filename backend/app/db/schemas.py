@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+from app.utils.datetime_utils import get_utc_now, ensure_utc
+
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from enum import Enum
@@ -127,8 +129,8 @@ class ApprovalRequestCreate(ApprovalRequestBase):
     @field_validator('expires_at')
     @classmethod
     def validate_expiry(cls, v: Optional[datetime]) -> Optional[datetime]:
-        if v and v <= datetime.now():
-            raise ValueError('La data di scadenza deve essere futura')
+        if v and ensure_utc(v) <= get_utc_now():  # 🔧 Fix: usa ensure_utc e get_utc_now
+            raise ValueError("La data di scadenza deve essere nel futuro")
         return v
     
     @field_validator('recipients')
