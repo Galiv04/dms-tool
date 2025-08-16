@@ -3,7 +3,6 @@ import React, { useState } from "react";
 import {
   useDocuments,
   useDeleteDocument,
-  useDownloadDocument,
 } from "../hooks/useDocuments";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +24,8 @@ import {
   FileSpreadsheet,
   Loader2,
 } from "lucide-react";
+import { useHandleDownloadDocument } from "../utils/handleDownloadDocument";
+
 
 const DocumentList = ({ filters = {} }) => {
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -45,7 +46,7 @@ const DocumentList = ({ filters = {} }) => {
   }
 
   const deleteMutation = useDeleteDocument();
-  const downloadMutation = useDownloadDocument();
+const { handleDownload, downloadMutation } = useHandleDownloadDocument();
 
   const handleDelete = async (document) => {
 
@@ -56,16 +57,6 @@ const DocumentList = ({ filters = {} }) => {
       deleteMutation.mutate(document.id);
     }
   };
-
-const handleDownload = async (document) => {
-  // 🔧 FIX: Usa il filename corretto
-  const filename = document.original_filename || document.filename || 'documento';
-    
-  downloadMutation.mutate({
-    documentId: document.id,
-    filename: filename, // 🔧 Usa la variabile invece di accessing property
-  });
-};
 
   const formatFileSize = (bytes) => {
     // console.log('🔍 formatFileSize input:', bytes, typeof bytes);

@@ -9,6 +9,7 @@ from app.routers import health, auth, documents, approval, admin
 from app.configurations import settings
 from app.services.scheduler import get_scheduler
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager

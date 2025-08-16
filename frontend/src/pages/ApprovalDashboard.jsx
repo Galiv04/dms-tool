@@ -1,6 +1,10 @@
 // src/pages/ApprovalDashboard.jsx - ALLINEATO CON BACKEND
 import React, { useState } from "react";
-import { useApprovals, useApprovalStats } from "../hooks/useApprovals";
+import {
+  useApprovals,
+  useApprovalStats,
+  useApprovalsForMe,
+} from "../hooks/useApprovals";
 import { useAuth } from "../contexts/AuthContext";
 import ApprovalCard from "../components/approvals/ApprovalCard";
 import CreateApprovalModal from "../components/modals/CreateAppovalModal";
@@ -14,6 +18,7 @@ const ApprovalDashboard = () => {
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [tab, setTab] = useState("my-requests");
 
   // ✅ Sanitizza filtro prima di passarlo
   const sanitizedFilter = React.useMemo(() => {
@@ -34,6 +39,9 @@ const ApprovalDashboard = () => {
 
   const { data: stats } = useApprovalStats();
 
+  const { data: approvalsForMe = [], isLoading: loadingForMe } =
+    useApprovalsForMe();
+
   // ✅ Filtri aggiornati con nomi backend
   const filters = [
     { key: "all", label: "Tutte", count: stats?.total_requests || 0 },
@@ -50,6 +58,7 @@ const ApprovalDashboard = () => {
     },
   ];
 
+  // eslint-disable-next-line no-unused-vars
   const handleApprovalClick = (approval) => {
     console.log("Opening approval:", approval);
   };
@@ -145,6 +154,22 @@ const ApprovalDashboard = () => {
           </Card>
         </div>
       )}
+      {/* Tab my-requests and for-me */}
+      <div className="flex space-x-2 mb-6">
+        <Button
+          variant={tab === "my-requests" ? "default" : "outline"}
+          onClick={() => setTab("my-requests")}
+        >
+          Le mie richieste
+        </Button>
+        <Button
+          variant={tab === "for-me" ? "default" : "outline"}
+          onClick={() => setTab("for-me")}
+        >
+          Da approvare
+          <span className="ml-2">{approvalsForMe.length}</span>
+        </Button>
+      </div>
 
       {/* Filters */}
       <div className="flex items-center gap-4">
@@ -183,35 +208,53 @@ const ApprovalDashboard = () => {
         </Button>
       </div>
 
-      {/* Approvals List */}
-      <div className="space-y-4">
-        {approvals.length > 0 ? (
-          <div className="grid gap-4 md:gap-6">
-            {approvals.map((approval) => (
+      {/* Le richieste create da te - tab default */}
+      {tab === "my-requests" && (
+        <>
+          <h2 className="mb-4 text-lg font-semibold">
+            Le mie richieste di approvazione
+          </h2>
+          {isLoading ? (
+            <Loader2 className="animate-spin" />
+          ) : approvals.length === 0 ? (
+            <Alert>
+              <AlertDescription>
+                Nessuna richiesta creata da te
+              </AlertDescription>
+            </Alert>
+          ) : (
+            approvals.map((approval) => (
+              <ApprovalCard key={approval.id} approval={approval} />
+            ))
+          )}
+        </>
+      )}
+
+      {/* Le richieste dove sei destinatario */}
+      {tab === "for-me" && (
+        <>
+          <h2 className="mb-4 text-lg font-semibold">
+            Richieste dove sei destinatario
+          </h2>
+          {loadingForMe ? (
+            <Loader2 className="animate-spin" />
+          ) : approvalsForMe.length === 0 ? (
+            <Alert>
+              <AlertDescription>
+                Nessuna richiesta da approvare
+              </AlertDescription>
+            </Alert>
+          ) : (
+            approvalsForMe.map((approval) => (
               <ApprovalCard
                 key={approval.id}
                 approval={approval}
-                onClick={handleApprovalClick}
-                showActions={false} // Disabilita azioni dirette da dashboard
-                showDelete={true} // 🔧 Abilita pulsante elimina
-                onApprove={() => console.log("Approve:", approval.id)}
-                onReject={() => console.log("Reject:", approval.id)}
+                showActions={true}
               />
-            ))}
-          </div>
-        ) : (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground text-center">
-                {activeFilter === "all"
-                  ? "Non ci sono richieste di approvazione."
-                  : `Non ci sono richieste ${activeFilter}.`}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            ))
+          )}
+        </>
+      )}
 
       {/* Modal Creazione */}
       <CreateApprovalModal

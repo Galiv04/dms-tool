@@ -218,3 +218,32 @@ export const useDeleteApproval = () => {
     }
   })
 }
+
+// Hook per approvazioni dove sei destinatario
+export const useApprovalsForMe = (options = {}) => {
+  return useQuery({
+    // Key coerente con le altre query
+    queryKey: ['approvals', 'for-me'],
+
+    // Funzione asincrona coerente con le altre
+    queryFn: async () => {
+      try {
+        const response = await apiClient.get('/approvals/for-me');
+        // Se il backend ritorna direttamente un array, nessun .data.data
+        return response.data;
+      } catch (error) {
+        if (error.response?.status === 404) {
+          console.warn('Approvals (for-me) endpoint not found');
+          return [];
+        }
+        throw error;
+      }
+    },
+
+    // Opzioni React Query personalizzabili (fallback, staleTime, etc.)
+    staleTime: 30 * 1000,
+    retry: 2,
+    ...options,
+  });
+};
+

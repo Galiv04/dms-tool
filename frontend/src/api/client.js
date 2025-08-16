@@ -1,14 +1,17 @@
 import axios from 'axios'
 
-const API_BASE_URL = 'http://localhost:8000'
-
-// Istanza axios preconfigurata
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  // Se hai proxy, usa URL relativi:
+  baseURL: import.meta.env.VITE_API_URL || '/',
+  
+  // Se NON hai proxy, usa URL assoluti:
+  // baseURL: 'http://localhost:8000',
+  
+  timeout: 10000,
   headers: {
-    'Content-Type': 'application/json'
-  }
-})
+    'Content-Type': 'application/json',
+  },
+});
 
 // Interceptor per aggiungere token automaticamente
 apiClient.interceptors.request.use(

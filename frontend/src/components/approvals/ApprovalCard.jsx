@@ -24,24 +24,30 @@ import {
   AlertCircle,
   Ban,
   Trash2,
+  Download,
+  MessageSquare,
+  Loader2,
 } from "lucide-react";
-import { useDeleteApproval } from "../../hooks/useApprovals";
+import { useDeleteApproval, useApproveByToken } from "../../hooks/useApprovals";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "../../contexts/AuthContext";
 import ConfirmDialog from "../ui/ConfirmDialog"; // 🔧 Nostro componente personalizzato
+import { useHandleDownloadDocument } from "../../utils/handleDownloadDocument";
 
 const ApprovalCard = ({
   approval,
   onClick,
   showActions = false,
-  showDelete = false,
-  onApprove,
-  onReject,
+  showDelete = true,
+  onDeleteSuccess,
 }) => {
   const { user } = useAuth();
 
-  const deleteApproval = useDeleteApproval();
   const [isConfirmOpen, setConfirmOpen] = useState(false); // 🔧 State per modal
+  const [showCommentForm, setShowCommentForm] = useState(false);
+  const [comments, setComments] = useState("");
+  const [pendingDecision, setPendingDecision] = useState(null);
 
   // ... tutti i tuoi metodi esistenti (getStatusIcon, formatDateTime, ecc.) rimangono uguali ...
 
@@ -100,23 +106,62 @@ const ApprovalCard = ({
     };
   };
 
+  // Mutation decisione come recipient
+  const approveMutation = useApproveByToken();
+
+  // Mutation per cancellazione da creator
+  const deleteApproval = useDeleteApproval();
+
+  // Trova il recipient corrispondente all'utente loggato
+  const myRecipient = approval.recipients?.find(
+    (r) => r.recipient_email === user?.email
+  );
+
+  // Recipient pending può agire SOLO se la richiesta è pending!
+  const canDecide =
+    showActions &&
+    myRecipient &&
+    myRecipient.status === "pending" &&
+    approval.status === "pending";
+
+  // Handler per approvazione/rifiuto
+  const handleDecision = async (approved) => {
+    if (!myRecipient?.approval_token) return;
+    setPendingDecision(approved ? "approved" : "rejected");
+    approveMutation.mutate(
+      {
+        token: myRecipient.approval_token,
+        approved,
+        comments: comments.trim(),
+      },
+      {
+        onSuccess: () => {
+          setShowCommentForm(false);
+          setComments("");
+          setPendingDecision(null);
+        },
+        onError: () => setPendingDecision(null),
+      }
+    );
+  };
+
   // 🔧 Handler per aprire conferma eliminazione
   const handleDeleteClick = (e) => {
     e.stopPropagation();
 
-    // 🔍 DEBUG: Vediamo cosa contiene approval
-    console.log("🔍 DEBUG approval object:", approval);
-    console.log("🔍 DEBUG document info:", {
-      "approval.document": approval.document,
-      "approval.document?.original_filename":
-        approval.document?.original_filename,
-      "approval.document?.filename": approval.document?.filename,
-    });
-    console.log("🔍 DEBUG recipients info:", {
-      "approval.recipients": approval.recipients,
-      "approval.recipients?.length": approval.recipients?.length,
-      "approval.recipient_count": approval.recipient_count,
-    });
+    // // 🔍 DEBUG: Vediamo cosa contiene approval
+    // console.log("🔍 DEBUG approval object:", approval);
+    // console.log("🔍 DEBUG document info:", {
+    //   "approval.document": approval.document,
+    //   "approval.document?.original_filename":
+    //     approval.document?.original_filename,
+    //   "approval.document?.filename": approval.document?.filename,
+    // });
+    // console.log("🔍 DEBUG recipients info:", {
+    //   "approval.recipients": approval.recipients,
+    //   "approval.recipients?.length": approval.recipients?.length,
+    //   "approval.recipient_count": approval.recipient_count,
+    // });
 
     setConfirmOpen(true);
   };
@@ -163,6 +208,8 @@ const ApprovalCard = ({
   });
 
   const progress = getApprovalProgress();
+
+  const { handleDownload } = useHandleDownloadDocument();
 
   return (
     <TooltipProvider>
@@ -304,34 +351,92 @@ const ApprovalCard = ({
             </div>
           </div>
 
-          {/* Actions */}
-          {showActions && approval.status === "pending" && (
-            <div className="flex gap-2 pt-3 border-t">
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onApprove?.(approval);
-                }}
-                disabled={!onApprove}
-                size="sm"
-                className="flex-1"
-              >
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Approva
-              </Button>
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReject?.(approval);
-                }}
-                disabled={!onReject}
-                variant="destructive"
-                size="sm"
-                className="flex-1"
-              >
-                <XCircle className="h-4 w-4 mr-2" />
-                Rifiuta
-              </Button>
+          {/* Decisione recipient */}
+          {canDecide && (
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <h4 className="font-semibold mb-3 flex items-center">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                La tua decisione richiesta
+              </h4>
+              {!showCommentForm ? (
+                <div className="flex gap-2 pt-3 border-t">
+                  <Button
+                    onClick={() => {
+                      setShowCommentForm(true);
+                      setPendingDecision("approved");
+                    }}
+                    disabled={approveMutation.isPending}
+                    size="sm"
+                    className="flex-1"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Approva
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowCommentForm(true);
+                      setPendingDecision("rejected");
+                    }}
+                    disabled={approveMutation.isPending}
+                    variant="destructive"
+                    size="sm"
+                    className="flex-1"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Rifiuta
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    {pendingDecision === "approved" ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-green-600">Approvazione</span>
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="w-4 h-4 text-red-600" />
+                        <span className="text-red-600">Rifiuto</span>
+                      </>
+                    )}
+                  </div>
+                  <Textarea
+                    placeholder="Aggiungi commenti opzionali alla tua decisione..."
+                    value={comments}
+                    onChange={(e) => setComments(e.target.value)}
+                    rows={3}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() =>
+                        handleDecision(pendingDecision === "approved")
+                      }
+                      disabled={approveMutation.isPending}
+                    >
+                      {approveMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Invio...
+                        </>
+                      ) : (
+                        `Conferma ${pendingDecision === "approved" ? "Approvazione" : "Rifiuto"}`
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowCommentForm(false);
+                        setComments("");
+                        setPendingDecision(null);
+                      }}
+                      disabled={approveMutation.isPending}
+                    >
+                      Annulla
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -361,6 +466,35 @@ const ApprovalCard = ({
                 {formatDateTime(approval.completed_at)}
               </span>
               {approval.completion_reason && ` (${approval.completion_reason})`}
+            </div>
+          )}
+
+          {approval.document && (
+            <div className="my-2 space-y-2">
+              <div>
+                <strong>Documento:</strong>{" "}
+                {approval.document.original_filename}
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => handleDownload(approval.document)}
+                className="mr-2"
+              >
+                <Download className="h-4 w-4 mr-1" />
+                Scarica
+              </Button>
+              {approval.document.content_type === "application/pdf" && (
+                <div style={{ height: 320, border: "1px solid #eee" }}>
+                  <iframe
+                    src={`/api/documents/${approval.document.id}/preview`}
+                    title="Anteprima documento"
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                  />
+                </div>
+              )}
+              {/* Altri tipi di file: usa <img /> per immagini, ecc. */}
             </div>
           )}
         </CardContent>
