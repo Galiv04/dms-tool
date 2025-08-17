@@ -250,7 +250,8 @@ async def get_approval_requests_for_me(
             req_dict["document"] = {
                 "id": req.document.id,
                 "filename": req.document.filename,
-                "original_filename": req.document.original_filename
+                "original_filename": req.document.original_filename,
+                "content_type": req.document.content_type
             }
 
         # Aggiungi dati recipients
@@ -344,46 +345,17 @@ async def cancel_approval_request(
         )
 
 
-@router.post("/decide/{approval_token}", response_model=ApprovalDecisionResponse)
-async def process_approval_decision(
-    approval_token: str,
-    decision_data: ApprovalDecisionRequest,
-    request: Request,
-    approval_service: ApprovalService = Depends(get_approval_service)
-) -> ApprovalDecisionResponse:
-    """
-    Processa una decisione di approvazione tramite token
-    QUESTO ENDPOINT NON RICHIEDE AUTENTICAZIONE (token-based)
-    - **approval_token**: Token univoco del destinatario
-    - **decision**: "approved" o "rejected"
-    - **comments**: Commenti opzionali sulla decisione
-    """
-    try:
-        client_info = get_client_info(request)
-        result = approval_service.process_approval_decision(
-            approval_token=approval_token,
-            decision_data=decision_data,
-            client_ip=client_info["ip_address"],
-            user_agent=client_info["user_agent"]
-        )
+@router.post("/approvals/decide/{approval_token}")
+async def decide_approval(approval_token: str, decision: ApprovalDecisionRequest, db: Session = Depends(get_db)):
+    recipient = db.query(ApprovalRecipient).filter_by(approval_token=approval_token).first()
+    if not recipient or recipient.status != 'pending':
+        raise HTTPException(...)
+    recipient.status = decision.decision  # "approved" or "rejected"
+    recipient.comments = decision.comments
+    recipient.responded_at = datetime.now()
+    # Avanza anche lo stato globale se necessario ...
+    db.commit()
 
-        # Converti il risultato del service in schema Pydantic
-        return ApprovalDecisionResponse(
-            message=result["message"],
-            status=result["recipient_status"],
-            approval_request_status=result["approval_request_status"],
-            completed=result["completed"]
-        )
-    except NotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
-    except ValidationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
 
 # ===== DASHBOARD E STATISTICHE =====
 

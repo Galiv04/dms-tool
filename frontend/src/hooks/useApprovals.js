@@ -1,4 +1,3 @@
-// src/hooks/useApprovals.js - VERSIONE CORRETTA PER IL BACKEND
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../api/client'
@@ -138,22 +137,17 @@ export const useCreateApproval = () => {
   })
 }
 
-// Hook per approvazione tramite token
-export const useApproveByToken = () => {
-  const queryClient = useQueryClient()
-  
-  return useMutation({
-    mutationFn: ({ token, approved, comments }) => 
-      approvalsApi.approveByToken({ token, approved, comments }),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['approvals'])
-      queryClient.invalidateQueries(['approval-stats'])
-    },
-    onError: (error) => {
-      console.error('Token approval failed:', error)
+export function useApproveByToken() {
+  return useMutation(
+    async ({ token, approved, comments }) => {
+      await apiClient.post(`/approvals/decide/${token}`, {
+        decision: approved ? "approved" : "rejected",
+        comments,
+      });
     }
-  })
+  );
 }
+
 
 // Hook per cancellazione
 export const useCancelApproval = () => {

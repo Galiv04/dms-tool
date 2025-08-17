@@ -184,7 +184,7 @@ class DocumentInfo(BaseModel):
     id: str
     filename: str
     original_filename: str
-    
+    content_type: str
     model_config = ConfigDict(from_attributes=True)
 
 class RecipientInfo(BaseModel):

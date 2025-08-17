@@ -302,7 +302,8 @@ class ApprovalService:
                 req_dict["document"] = {
                     "id": req.document.id,
                     "filename": req.document.filename,
-                    "original_filename": req.document.original_filename
+                    "original_filename": req.document.original_filename,
+                    "content_type": req.document.content_type
                 }
             
             # 🔧 AGGIUNGI dati recipients
