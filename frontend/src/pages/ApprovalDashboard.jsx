@@ -224,7 +224,11 @@ const ApprovalDashboard = () => {
             </Alert>
           ) : (
             approvals.map((approval) => (
-              <ApprovalCard key={approval.id} approval={approval} />
+              <ApprovalCard
+                key={approval.id}
+                approval={approval}
+                showActions={true}
+              />
             ))
           )}
         </>
