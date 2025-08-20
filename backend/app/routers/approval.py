@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.base import get_db
@@ -15,7 +15,7 @@ from app.services.approval import ApprovalService
 from app.utils.security import get_current_user
 from app.utils.exceptions import NotFoundError, ValidationError, PermissionDeniedError
 from pydantic import BaseModel
-
+import logging
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
 
@@ -127,38 +127,41 @@ async def validate_approval_data(
 async def create_approval_request(
     request_data: ApprovalRequestCreate,
     request: Request,
+    background_tasks: BackgroundTasks,  # 🆕 OPZIONALE per future implementazioni
     current_user: User = Depends(get_current_user),
     approval_service: ApprovalService = Depends(get_approval_service)
 ) -> ApprovalRequestResponse:
-    """
-    Crea una nuova richiesta di approvazione
-    - **document_id**: ID del documento da approvare
-    - **title**: Titolo della richiesta
-    - **description**: Descrizione opzionale
-    - **approval_type**: "all" (tutti devono approvare) o "any" (basta uno)
-    - **recipients**: Lista destinatari con email e nome
-    - **expires_at**: Data scadenza opzionale
-    - **requester_comments**: Commenti del richiedente
-    """
+    """Crea una nuova richiesta di approvazione e invia email"""
+    
+    # Setup logging per questo endpoint
+    logger = logging.getLogger(__name__)
+    logger.info(f"📥 New approval request from user {current_user.id}: '{request_data.title}'")
+    
     try:
         client_info = get_client_info(request)
+        
+        # La creazione e invio email sono già inclusi nel service
         response = approval_service.create_approval_request(
             request_data=request_data,
             requester_id=current_user.id,
             client_ip=client_info["ip_address"],
             user_agent=client_info["user_agent"]
         )
+        
+        logger.info(f"✅ Approval request created successfully: {response.id}")
         return response
+
     except NotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        logger.error(f"❌ NotFound error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValidationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        logger.error(f"❌ Validation error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Unexpected error: {str(e)}")
+        logger.exception("Full error traceback:")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                          detail="Errore interno del server")
 
 
 @router.get("/", response_model=List[ApprovalRequestListResponse])
@@ -367,6 +370,7 @@ async def submit_approval_decision(
     approval_token: str,
     decision_data: ApprovalDecisionRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """Submit approval decision using token"""

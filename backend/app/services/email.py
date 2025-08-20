@@ -15,10 +15,12 @@ from app.utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
+
 class EmailService:
     """Service per l'invio di email nel sistema di approvazioni"""
 
     def __init__(self):
+        self.enabled = settings.email_enabled
         self.smtp_server = settings.smtp_server
         self.smtp_port = settings.smtp_port
         self.smtp_username = settings.smtp_username
@@ -26,6 +28,7 @@ class EmailService:
         self.smtp_use_tls = settings.smtp_use_tls
         self.email_from = settings.email_from
         self.approval_url_base = settings.approval_url_base
+        self.app_name = settings.app_name or "Document Management System"
 
         # Setup Jinja2 per template
         self.template_dir = Path("templates/email")
@@ -39,12 +42,13 @@ class EmailService:
         """Crea connessione SMTP con fallback SSL per compatibilità"""
         server = None
         last_error = None
-        
+
         try:
             if self.smtp_use_tls:
                 # Tentativo 1: SSL strict (produzione)
                 try:
-                    logger.info("Attempting SMTP connection with strict SSL...")
+                    logger.info(
+                        "Attempting SMTP connection with strict SSL...")
                     context_strict = ssl.create_default_context()
                     server = smtplib.SMTP(self.smtp_server, self.smtp_port)
                     server.starttls(context=context_strict)
@@ -52,34 +56,39 @@ class EmailService:
                     logger.warning(f"Strict SSL failed: {ssl_error}")
                     last_error = ssl_error
                     # Tentativo 2: SSL permissivo (sviluppo/test)
-                    logger.info("Attempting SMTP connection with permissive SSL...")
+                    logger.info(
+                        "Attempting SMTP connection with permissive SSL...")
                     context_permissive = ssl.create_default_context()
                     context_permissive.check_hostname = False
                     context_permissive.verify_mode = ssl.CERT_NONE
                     server = smtplib.SMTP(self.smtp_server, self.smtp_port)
                     server.starttls(context=context_permissive)
-                    logger.warning("Using permissive SSL context (not recommended for production)")
+                    logger.warning(
+                        "Using permissive SSL context (not recommended for production)")
             else:
                 # SSL diretto
                 context = ssl.create_default_context()
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
-                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port, context=context)
+                server = smtplib.SMTP_SSL(
+                    self.smtp_server, self.smtp_port, context=context)
 
             # Login
             if self.smtp_username and self.smtp_password:
                 server.login(self.smtp_username, self.smtp_password)
 
-            logger.info(f"SMTP connection established to {self.smtp_server}:{self.smtp_port}")
+            logger.info(
+                f"SMTP connection established to {self.smtp_server}:{self.smtp_port}")
             return server
-            
+
         except Exception as e:
             if server:
                 try:
                     server.quit()
                 except:
                     pass
-            logger.error(f"All SMTP connection attempts failed. Last error: {e}")
+            logger.error(
+                f"All SMTP connection attempts failed. Last error: {e}")
             raise last_error or e
 
     def _send_email(
@@ -92,7 +101,8 @@ class EmailService:
     ) -> bool:
         """Invia email con supporto HTML e allegati"""
         if not settings.email_enabled:
-            logger.info(f"Email disabled - would send to {to_email}: {subject}")
+            logger.info(
+                f"Email disabled - would send to {to_email}: {subject}")
             return True
 
         try:
@@ -122,7 +132,7 @@ class EmailService:
 
             logger.info(f"Email sent successfully to {to_email}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {e}")
             return False
@@ -138,7 +148,8 @@ class EmailService:
             )
             message.attach(part)
         except Exception as e:
-            logger.error(f"Failed to add attachment {attachment.get('filename')}: {e}")
+            logger.error(
+                f"Failed to add attachment {attachment.get('filename')}: {e}")
 
     def _render_template(self, template_name: str, context: Dict[str, Any]) -> str:
         """Renderizza template Jinja2"""
@@ -152,7 +163,7 @@ class EmailService:
 
     def _create_fallback_template(self, template_name: str, context: Dict[str, Any]) -> str:
         """Template moderni con stile inline minimalista"""
-        
+
         # CSS base per tutti i template
         base_style = """
         <style>
@@ -170,7 +181,7 @@ class EmailService:
             .badge.rejected { background: #f8d7da; color: #721c24; }
         </style>
         """
-        
+
         if "approval_request" in template_name:
             recipient_name = context.get('recipient_name', 'Utente')
             title = context.get('title', 'Richiesta Approvazione')
@@ -178,7 +189,7 @@ class EmailService:
             document_filename = context.get('document_filename', 'Documento')
             approval_url = context.get('approval_url', '#')
             expires_at = context.get('expires_at', '')
-            
+
             return f"""
             <!DOCTYPE html>
             <html>
@@ -217,17 +228,17 @@ class EmailService:
             </body>
             </html>
             """
-        
+
         elif "completion" in template_name:
             requester_name = context.get('requester_name', 'Utente')
             title = context.get('title', 'Richiesta')
             final_status = context.get('final_status', 'completata')
             approved_count = context.get('approved_count', 0)
             total_recipients = context.get('total_recipients', 0)
-            
+
             status_icon = "✅" if final_status == "approved" else "❌" if final_status == "rejected" else "⏰"
             status_class = "approved" if final_status == "approved" else "rejected"
-            
+
             return f"""
             <!DOCTYPE html>
             <html>
@@ -265,15 +276,15 @@ class EmailService:
             </body>
             </html>
             """
-            
+
         elif "reminder" in template_name:
             recipient_name = context.get('recipient_name', 'Utente')
             title = context.get('title', 'Richiesta')
             days_left = context.get('days_left', 0)
             approval_url = context.get('approval_url', '#')
-            
+
             urgency_color = "#dc3545" if days_left <= 1 else "#ffc107" if days_left <= 3 else "#28a745"
-            
+
             return f"""
             <!DOCTYPE html>
             <html>
@@ -312,7 +323,7 @@ class EmailService:
             </body>
             </html>
             """
-        
+
         # Fallback generico
         return f"""
         <!DOCTYPE html>
@@ -392,7 +403,8 @@ Scadenza: {context['expires_at'] or 'Nessuna'}
             )
 
         except Exception as e:
-            logger.error(f"Failed to send approval request email to {recipient.recipient_email}: {e}")
+            logger.error(
+                f"Failed to send approval request email to {recipient.recipient_email}: {e}")
             return False
 
     def send_completion_notification_email(
@@ -403,9 +415,11 @@ Scadenza: {context['expires_at'] or 'Nessuna'}
         try:
             requester = approval_request.requester
             recipients = approval_request.recipients
-            
-            approved_count = len([r for r in recipients if r.status.value == "approved"])
-            rejected_count = len([r for r in recipients if r.status.value == "rejected"])
+
+            approved_count = len(
+                [r for r in recipients if r.status.value == "approved"])
+            rejected_count = len(
+                [r for r in recipients if r.status.value == "rejected"])
 
             # Contesto per template
             context = {
@@ -425,7 +439,8 @@ Scadenza: {context['expires_at'] or 'Nessuna'}
             }
 
             # Renderizza template
-            html_body = self._render_template("approval_completion.html", context)
+            html_body = self._render_template(
+                "approval_completion.html", context)
 
             # Oggetto email basato su stato finale
             status_text = "Approvato" if approval_request.status.value == "approved" else "Rifiutato"
@@ -460,7 +475,8 @@ Completata il: {context['completed_at']}
             )
 
         except Exception as e:
-            logger.error(f"Failed to send completion email to {approval_request.requester.email}: {e}")
+            logger.error(
+                f"Failed to send completion email to {approval_request.requester.email}: {e}")
             return False
 
     def send_reminder_email(
@@ -491,7 +507,8 @@ Completata il: {context['completed_at']}
             }
 
             # Renderizza template
-            html_body = self._render_template("approval_reminder.html", context)
+            html_body = self._render_template(
+                "approval_reminder.html", context)
 
             # Oggetto email
             subject = f"[{settings.app_name or 'DMS'}] ⏰ Reminder: {approval_request.title}"
@@ -522,53 +539,105 @@ Scade il: {context['expires_at']}
             )
 
         except Exception as e:
-            logger.error(f"Failed to send reminder email to {recipient.recipient_email}: {e}")
+            logger.error(
+                f"Failed to send reminder email to {recipient.recipient_email}: {e}")
             return False
 
-    def send_bulk_approval_emails(
-        self,
-        approval_request: ApprovalRequest
-    ) -> Dict[str, bool]:
-        """Invia email di approvazione a tutti i destinatari"""
-        results = {}
-        
-        for recipient in approval_request.recipients:
-            if recipient.status.value == "pending":
-                success = self.send_approval_request_email(approval_request, recipient)
-                results[recipient.recipient_email] = success
-            else:
-                logger.info(f"Skipping email for {recipient.recipient_email} - status: {recipient.status.value}")
+    def send_bulk_approval_emails(self, approval_request) -> Dict[str, bool]:
+        """Send emails to all recipients of an approval request"""
+        if not self.enabled:
+            print("📧 Email service disabled")
+            return {}
 
-        logger.info(f"Bulk email results: {sum(results.values())}/{len(results)} successful")
+        results = {}
+
+        for recipient in approval_request.recipients:
+            try:
+                recipient_email = recipient.recipient_email
+                recipient_name = recipient.recipient_name or recipient_email.split(
+                    '@')[0]
+
+                # 🔧 Prepara subject e content per il template
+                subject = f"📋 Nuova richiesta di approvazione: {approval_request.title}"
+
+                # 🔧 Prepara template data come fa il tuo sistema esistente
+                template_data = {
+                    "recipient_name": recipient_name,
+                    "title": approval_request.title,
+                    "document_filename": approval_request.document.original_filename,
+                    "requester_name": approval_request.requester.display_name or approval_request.requester.email,
+                    "expires_at": approval_request.expires_at.strftime('%d/%m/%Y %H:%M') if approval_request.expires_at else "Nessuna scadenza",
+                    "approval_token": recipient.approval_token,
+                    "description": approval_request.description or "",
+                    "app_name": "Document Management System"
+                }
+
+                # 🔧 Usa il metodo che esiste nel tuo EmailService
+                # Controlla se hai send_email, _send_email, o send_template_email
+                if hasattr(self, 'send_email'):
+                    # Se hai send_email che accetta html_content
+                    html_content = self._render_approval_template(
+                        template_data)
+                    success = self.send_email(
+                        recipient_email, subject, html_content)
+                elif hasattr(self, '_send_email'):
+                    # Se hai _send_email
+                    html_content = self._render_approval_template(
+                        template_data)
+                    success = self._send_email(
+                        recipient_email, subject, html_content)
+                elif hasattr(self, 'send_template_email'):
+                    # Se hai send_template_email
+                    success = self.send_template_email(
+                        to_email=recipient_email,
+                        subject=subject,
+                        template_name="approval_request.html",
+                        template_data=template_data
+                    )
+                else:
+                    # Fallback - usa il primo metodo che trovi che inizia con 'send'
+                    send_methods = [method for method in dir(self) if method.startswith(
+                        'send') and not method.startswith('send_bulk')]
+                    if send_methods:
+                        print(f"🔍 Using method: {send_methods[0]}")
+                        method = getattr(self, send_methods)
+                        success = method(
+                            recipient_email, subject, template_data)
+                    else:
+                        print(f"❌ No send method found in EmailService")
+                        success = False
+
+                results[recipient_email] = success
+
+            except Exception as e:
+                print(f"❌ Error sending to {recipient.recipient_email}: {e}")
+                results[recipient.recipient_email] = False
+
         return results
 
-    def test_email_configuration(self) -> Dict[str, Any]:
-        """Testa la configurazione email"""
-        test_results = {
-            "smtp_connection": False,
-            "email_enabled": settings.email_enabled,
-            "configuration": {
-                "smtp_server": self.smtp_server,
-                "smtp_port": self.smtp_port,
-                "smtp_use_tls": self.smtp_use_tls,
-                "email_from": self.email_from,
-                "has_credentials": bool(self.smtp_username and self.smtp_password)
-            },
-            "error": None
-        }
-
-        if not settings.email_enabled:
-            test_results["error"] = "Email service is disabled in configuration"
-            return test_results
-
-        try:
-            # Test connessione SMTP
-            with self._create_smtp_connection() as server:
-                test_results["smtp_connection"] = True
-            logger.info("SMTP connection test successful")
+    def _render_approval_template(self, template_data):
+        """Simple template rendering for approval email"""
+        return f"""
+        <html>
+        <body>
+            <h2>📋 Nuova Richiesta di Approvazione</h2>
+            <p>Ciao <strong>{template_data['recipient_name']}</strong>,</p>
             
-        except Exception as e:
-            test_results["error"] = str(e)
-            logger.error(f"SMTP connection test failed: {e}")
-
-        return test_results
+            <p>Hai ricevuto una nuova richiesta di approvazione:</p>
+            
+            <div style="background: #f0f0f0; padding: 15px; margin: 15px 0;">
+                <h3>{template_data['title']}</h3>
+                <p><strong>📄 Documento:</strong> {template_data['document_filename']}</p>
+                <p><strong>👤 Richiedente:</strong> {template_data['requester_name']}</p>
+                <p><strong>📅 Scadenza:</strong> {template_data['expires_at']}</p>
+            </div>
+            
+            <p><a href="http://localhost:5173/approval?token={template_data['approval_token']}" 
+                style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+            🔍 Visualizza e Decidi</a></p>
+            
+            <hr>
+            <p style="color: #666; font-size: 12px;">{template_data['app_name']} - Non rispondere a questa email</p>
+        </body>
+        </html>
+        """

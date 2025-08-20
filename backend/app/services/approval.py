@@ -18,6 +18,7 @@ from app.utils.exceptions import ValidationError, NotFoundError, PermissionDenie
 from app.services.email import EmailService
 from datetime import datetime, timezone, timedelta
 from app.utils.datetime_utils import format_datetime_for_api, get_utc_now, ensure_utc
+import logging
 
 
 class ApprovalService:
@@ -180,6 +181,42 @@ class ApprovalService:
         recipient.user_agent = user_agent
 
         self.db.commit()
+
+        # 📧 Invia email di notifica al richiedente
+        try:
+            from app.services.email import EmailService
+
+            if EmailService.enabled:
+                approval_request = recipient.approval_request
+
+                decision_email_data = {
+                    'title': approval_request.title,
+                    'document_filename': approval_request.document.original_filename,
+                    'recipient_name': recipient.recipient_name or recipient.recipient_email,
+                    'recipient_email': recipient.recipient_email,
+                    'decision': decision_data.decision,
+                    'comments': decision_data.comments,
+                    'decided_at': get_utc_now().strftime('%d/%m/%Y %H:%M'),
+                    'approval_completed': final_status != ApprovalStatus.PENDING,
+                    'final_status': final_status.value if final_status != ApprovalStatus.PENDING else None
+                }
+
+                # Invio email in background tramite thread (per non bloccare la risposta)
+                import threading
+                email_thread = threading.Thread(
+                    target=EmailService.send_approval_decision_email,
+                    args=(
+                        approval_request.requester.email,
+                        approval_request.requester.display_name or approval_request.requester.email,
+                        decision_email_data
+                    )
+                )
+                email_thread.daemon = True
+                email_thread.start()
+
+        except Exception as e:
+            logging.error(
+                f"Failed to send decision notification email: {str(e)}")
 
         # Carica la approval request
         approval_request = recipient.approval_request
@@ -595,68 +632,216 @@ class ApprovalService:
 
         return stats
 
-    def create_approval_request_with_email(
+    def create_approval_request(
         self,
         request_data: ApprovalRequestCreate,
         requester_id: int,
         client_ip: str = None,
-        user_agent: str = None,
-        send_emails: bool = True
-    ) -> Tuple[ApprovalRequestResponse, Dict[str, bool]]:
+        user_agent: str = None
+    ) -> ApprovalRequestResponse:
         """
-        Crea richiesta di approvazione e invia email ai destinatari
+        Crea una nuova richiesta di approvazione con destinatari e invio email
         """
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"🚀 Creating approval request: '{request_data.title}' for user {requester_id}")
+
+        # Verifica che il documento esista e appartenga al richiedente
+        logger.debug(
+            f"🔍 Verifying document {request_data.document_id} ownership")
+        document = self.db.query(Document).filter(
+            Document.id == request_data.document_id,
+            Document.owner_id == requester_id
+        ).first()
+
+        if not document:
+            logger.error(
+                f"❌ Document {request_data.document_id} not found or not owned by user {requester_id}")
+            raise NotFoundError(
+                f"Documento {request_data.document_id} non trovato o non autorizzato")
+
+        logger.info(f"✅ Document verified: {document.original_filename}")
+
+        # Verifica che non ci siano già richieste PENDING per questo documento
+        logger.debug(
+            f"🔍 Checking for existing pending requests for document {request_data.document_id}")
+        existing_pending = self.db.query(ApprovalRequest).filter(
+            ApprovalRequest.document_id == request_data.document_id,
+            ApprovalRequest.status == ApprovalStatus.PENDING
+        ).first()
+
+        if existing_pending:
+            logger.error(
+                f"❌ Existing pending request found: {existing_pending.id}")
+            raise ValidationError(
+                f"Esiste già una richiesta di approvazione in corso per questo documento")
+
+        logger.info("✅ No existing pending requests found")
+
         # Crea la richiesta di approvazione
-        approval_response = self.create_approval_request(
-            request_data=request_data,
+        logger.debug("🔧 Creating ApprovalRequest instance")
+        approval_request = ApprovalRequest(
+            document_id=request_data.document_id,
             requester_id=requester_id,
-            client_ip=client_ip,
-            user_agent=user_agent
+            title=request_data.title,
+            description=request_data.description,
+            approval_type=request_data.approval_type,
+            expires_at=ensure_utc(
+                request_data.expires_at) if request_data.expires_at else None,
+            requester_comments=request_data.requester_comments
         )
 
+        self.db.add(approval_request)
+        self.db.commit()
+        self.db.refresh(approval_request)
+
+        logger.info(
+            f"✅ ApprovalRequest created with ID: {approval_request.id}")
+
+        # Crea i destinatari
+        logger.debug(f"🔧 Creating {len(request_data.recipients)} recipients")
+        recipients = []
+        for i, recipient_data in enumerate(request_data.recipients, 1):
+            logger.debug(
+                f"  📧 Creating recipient {i}: {recipient_data.recipient_email}")
+            recipient = ApprovalRecipient(
+                approval_request_id=approval_request.id,
+                recipient_email=recipient_data.recipient_email,
+                recipient_name=recipient_data.recipient_name,
+                expires_at=ensure_utc(
+                    request_data.expires_at) if request_data.expires_at else None
+            )
+            recipients.append(recipient)
+
+        self.db.add_all(recipients)
+        self.db.commit()
+
+        # Refresh per caricare i recipients con token generati
+        self.db.refresh(approval_request)
+
+        logger.info(f"✅ Created {len(recipients)} recipients with tokens")
+        for recipient in approval_request.recipients:
+            logger.debug(
+                f"  📧 {recipient.recipient_email} → Token: {recipient.approval_token[:8]}...")
+
         email_results = {}
+        try:
+            logger.info("📧 Starting bulk email sending process")
 
-        if send_emails:
-            try:
-                # Invia email ai destinatari
-                email_service = EmailService()
+            # 🔧 CREA ISTANZA EmailService invece di usare singleton
+            email_service = EmailService()
 
-                # Recupera la richiesta dal database per avere tutte le relazioni
-                approval_request = self.db.query(ApprovalRequest).filter(
-                    ApprovalRequest.id == approval_response.id
-                ).first()
-
+            if email_service.enabled:
+                logger.info("✅ Email service is enabled, sending emails...")
                 email_results = email_service.send_bulk_approval_emails(
                     approval_request)
 
+                successful_emails = sum(email_results.values())
+                total_emails = len(email_results)
+
+                logger.info(
+                    f"📊 Email sending results: {successful_emails}/{total_emails} successful")
+
+                # Log dettagliato per ogni email
+                for email, success in email_results.items():
+                    status_icon = "✅" if success else "❌"
+                    logger.info(f"  {status_icon} {email}")
+
                 # Audit log per invio email
                 self._create_audit_log(
-                    approval_request_id=approval_response.id,
+                    approval_request_id=approval_request.id,
                     user_id=requester_id,
                     action="approval_emails_sent",
-                    details=f"Email inviate a {len(email_results)} destinatari",
+                    details=f"Email inviate a {total_emails} destinatari: {successful_emails} successi, {total_emails - successful_emails} errori",
                     metadata={
                         "email_results": email_results,
-                        "successful_emails": sum(email_results.values()),
-                        "total_emails": len(email_results)
+                        "successful_emails": successful_emails,
+                        "total_emails": total_emails,
+                        "recipients": [r.recipient_email for r in approval_request.recipients]
                     },
                     ip_address=client_ip,
                     user_agent=user_agent
                 )
 
-            except Exception as e:
-                # Log errore ma non fallire la creazione della richiesta
-                self._create_audit_log(
-                    approval_request_id=approval_response.id,
-                    user_id=requester_id,
-                    action="approval_emails_failed",
-                    details=f"Errore invio email: {str(e)}",
-                    metadata={"error": str(e)},
-                    ip_address=client_ip,
-                    user_agent=user_agent
-                )
+            else:
+                logger.warning("⚠️ Email service is disabled in configuration")
+                email_results = {
+                    r.recipient_email: False for r in approval_request.recipients}
 
-        return approval_response, email_results
+        except Exception as e:
+            logger.error(f"❌ Error during bulk email sending: {str(e)}")
+            logger.exception("Full email error traceback:")
+
+            # Log errore ma non fallire la creazione della richiesta
+            self._create_audit_log(
+                approval_request_id=approval_request.id,
+                user_id=requester_id,
+                action="approval_emails_failed",
+                details=f"Errore critico invio email: {str(e)}",
+                metadata={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "recipients_count": len(approval_request.recipients)
+                },
+                ip_address=client_ip,
+                user_agent=user_agent
+            )
+
+            # Setta tutti i risultati email come falliti
+            email_results = {
+                r.recipient_email: False for r in approval_request.recipients}
+
+        # Crea audit log principale per creazione
+        logger.debug("📝 Creating main audit log for request creation")
+        self._create_audit_log(
+            approval_request_id=approval_request.id,
+            user_id=requester_id,
+            action="approval_request_created",
+            details=f"Richiesta di approvazione creata: '{request_data.title}'",
+            metadata={
+                "document_id": request_data.document_id,
+                "document_filename": document.original_filename,
+                "approval_type": request_data.approval_type.value,
+                "recipients_count": len(recipients),
+                "expires_at": format_datetime_for_api(request_data.expires_at) if request_data.expires_at else None,
+                "email_sending_enabled": EmailService.enabled if 'EmailService' in locals() else False,
+                "emails_sent_successfully": sum(email_results.values()) if email_results else 0
+            },
+            ip_address=client_ip,
+            user_agent=user_agent
+        )
+
+        # Audit log per i destinatari aggiunti
+        recipient_emails = [r.recipient_email for r in recipients]
+        logger.debug(
+            f"📝 Creating recipients audit log for {len(recipient_emails)} recipients")
+        self._create_audit_log(
+            approval_request_id=approval_request.id,
+            user_id=requester_id,
+            action="recipients_added",
+            details=f"Aggiunti {len(recipients)} destinatari alla richiesta",
+            metadata={
+                "recipients": recipient_emails,
+                "tokens_generated": [r.approval_token for r in approval_request.recipients],
+                "email_results": email_results
+            },
+            ip_address=client_ip,
+            user_agent=user_agent
+        )
+
+        # Preparazione risposta finale
+        response = ApprovalRequestResponse.model_validate(approval_request)
+
+        # Log finale con riassunto
+        logger.info("🎉 Approval request creation completed successfully!")
+        logger.info(f"  📋 Request ID: {approval_request.id}")
+        logger.info(f"  📄 Document: {document.original_filename}")
+        logger.info(f"  👥 Recipients: {len(recipients)}")
+        logger.info(
+            f"  📧 Emails sent: {sum(email_results.values())}/{len(email_results)}")
+        logger.info(f"  🏷️ Title: {request_data.title}")
+
+        return response
 
     def delete_approval_request(
         self,
