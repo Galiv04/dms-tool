@@ -194,7 +194,9 @@ class RecipientInfo(BaseModel):
     recipient_name: Optional[str] = None
     status: RecipientStatus
     approval_token: str
-    model_config = ConfigDict(from_attributes=True)
+    comments: Optional[str] = None
+    responded_at: Optional[datetime] = None
+    decision: Optional[str] = None
     
 class ApprovalRequestListResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

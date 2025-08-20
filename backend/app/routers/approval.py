@@ -262,7 +262,10 @@ async def get_approval_requests_for_me(
                     "recipient_email": r.recipient_email,
                     "recipient_name": r.recipient_name,
                     "status": r.status,
-                    "approval_token": r.approval_token
+                    "approval_token": r.approval_token,
+                    "comments": r.comments,  # 🆕 AGGIUNGI QUESTO
+                    "responded_at": r.responded_at,  # Bonus: anche timestamp
+                    "decision": r.decision  # Bonus: anche decisione
                 }
                 for r in recipients_data
             ]
@@ -348,7 +351,8 @@ async def cancel_approval_request(
 
 @router.post("/decide/{approval_token}")
 async def decide_approval(approval_token: str, decision: ApprovalDecisionRequest, db: Session = Depends(get_db)):
-    recipient = db.query(ApprovalRecipient).filter_by(approval_token=approval_token).first()
+    recipient = db.query(ApprovalRecipient).filter_by(
+        approval_token=approval_token).first()
     if not recipient or recipient.status != 'pending':
         raise HTTPException(...)
     recipient.status = decision.decision  # "approved" or "rejected"
@@ -356,7 +360,8 @@ async def decide_approval(approval_token: str, decision: ApprovalDecisionRequest
     recipient.responded_at = datetime.now()
     # Avanza anche lo stato globale se necessario ...
     db.commit()
-    
+
+
 @router.post("/submit/{approval_token}", response_model=ApprovalDecisionResponse)
 async def submit_approval_decision(
     approval_token: str,
@@ -368,7 +373,7 @@ async def submit_approval_decision(
     try:
         client_ip = request.client.host
         user_agent = request.headers.get("user-agent")
-        
+
         approval_service = ApprovalService(db)
         result = approval_service.process_approval_decision(
             approval_token=approval_token,
@@ -376,19 +381,18 @@ async def submit_approval_decision(
             client_ip=client_ip,
             user_agent=user_agent
         )
-        
+
         return ApprovalDecisionResponse(
             message=result["message"],
             status=result["recipient_status"],
             approval_request_status=result["approval_request_status"],
             completed=result["completed"]
         )
-        
+
     except (NotFoundError, ValidationError) as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore server: {str(e)}")
-
 
 
 # ===== DASHBOARD E STATISTICHE =====

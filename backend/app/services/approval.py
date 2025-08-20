@@ -247,16 +247,18 @@ class ApprovalService:
         offset: int = 0
     ) -> List[ApprovalRequestListResponse]:
         """Lista le richieste di approvazione dell'utente"""
-        
+
         # 🔧 FIX: Aggiungi joinedload per includere tutti i dati necessari
         from sqlalchemy.orm import joinedload
-        
+
         query = self.db.query(ApprovalRequest)\
             .options(
                 joinedload(ApprovalRequest.requester),
-                joinedload(ApprovalRequest.document),      # ← AGGIUNGI per documento
-                joinedload(ApprovalRequest.recipients)     # ← AGGIUNGI per recipients
-            )\
+                # ← AGGIUNGI per documento
+                joinedload(ApprovalRequest.document),
+                # ← AGGIUNGI per recipients
+                joinedload(ApprovalRequest.recipients)
+        )\
             .filter(ApprovalRequest.requester_id == user_id)
 
         if status_filter:
@@ -271,9 +273,11 @@ class ApprovalService:
         result = []
         for req in requests:
             recipients = req.recipients
-            approved_count = len([r for r in recipients if r.status == RecipientStatus.APPROVED])
-            pending_count = len([r for r in recipients if r.status == RecipientStatus.PENDING])
-            
+            approved_count = len(
+                [r for r in recipients if r.status == RecipientStatus.APPROVED])
+            pending_count = len(
+                [r for r in recipients if r.status == RecipientStatus.PENDING])
+
             # 🔧 Costruisci il dizionario con tutti i dati necessari
             req_dict = {
                 "id": req.id,
@@ -288,7 +292,7 @@ class ApprovalService:
                 "approved_count": approved_count,
                 "pending_count": pending_count
             }
-            
+
             # 🔧 Aggiungi dati requester
             if req.requester:
                 req_dict["requester"] = {
@@ -296,7 +300,7 @@ class ApprovalService:
                     "email": req.requester.email,
                     "display_name": req.requester.display_name
                 }
-            
+
             # 🔧 AGGIUNGI dati documento
             if req.document:
                 req_dict["document"] = {
@@ -305,7 +309,7 @@ class ApprovalService:
                     "original_filename": req.document.original_filename,
                     "content_type": req.document.content_type
                 }
-            
+
             # 🔧 AGGIUNGI dati recipients
             if recipients:
                 req_dict["recipients"] = [
@@ -314,11 +318,14 @@ class ApprovalService:
                         "recipient_email": r.recipient_email,
                         "recipient_name": r.recipient_name,
                         "status": r.status,
-                        "approval_token": r.approval_token
+                        "approval_token": r.approval_token,
+                        "comments": r.comments,  # 🆕 AGGIUNGI QUESTO
+                        "responded_at": r.responded_at,
+                        "decision": r.decision
                     }
                     for r in recipients
                 ]
-            
+
             req_data = ApprovalRequestListResponse.model_validate(req_dict)
             result.append(req_data)
 
@@ -659,15 +666,15 @@ class ApprovalService:
     ) -> Dict[str, str]:
         """
         Elimina definitivamente una richiesta di approvazione
-        
+
         Args:
             request_id: ID della richiesta
             user_id: ID dell'utente (deve essere il richiedente)
             client_ip: IP per audit
-            
+
         Returns:
             Dict con messaggio di conferma
-            
+
         Raises:
             NotFoundError: Se la richiesta non esiste
             PermissionDeniedError: Se l'utente non è il richiedente
@@ -676,18 +683,20 @@ class ApprovalService:
         approval_request = self.db.query(ApprovalRequest).filter(
             ApprovalRequest.id == request_id
         ).first()
-        
+
         if not approval_request:
-            raise NotFoundError(f"Richiesta di approvazione {request_id} non trovata")
-        
+            raise NotFoundError(
+                f"Richiesta di approvazione {request_id} non trovata")
+
         if approval_request.requester_id != user_id:
-            raise PermissionDeniedError("Non sei autorizzato a eliminare questa richiesta")
-        
+            raise PermissionDeniedError(
+                "Non sei autorizzato a eliminare questa richiesta")
+
         if approval_request.status != ApprovalStatus.PENDING:
             raise ValidationError(
                 f"Non è possibile eliminare una richiesta in stato {approval_request.status.value}"
             )
-        
+
         # Audit log prima dell'eliminazione
         self._create_audit_log(
             approval_request_id=approval_request.id,
@@ -702,14 +711,14 @@ class ApprovalService:
             },
             ip_address=client_ip
         )
-        
+
         # Salva il titolo prima dell'eliminazione
         title = approval_request.title
-        
+
         # Elimina la richiesta (CASCADE eliminerà automaticamente recipients e audit logs)
         self.db.delete(approval_request)
         self.db.commit()
-        
+
         return {
             "message": f"Richiesta di approvazione '{title}' eliminata con successo",
             "request_id": request_id,
