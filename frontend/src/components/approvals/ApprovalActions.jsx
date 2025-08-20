@@ -1,9 +1,8 @@
-// src/components/approvals/ApprovalActions.jsx
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
-import { Check, X, MessageSquare, Trash2 } from 'lucide-react';
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { Check, X, MessageSquare, Trash2, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,168 +11,208 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useApprovalAction } from "@/hooks/useApprovals";
 
-const ApprovalActions = ({ 
-  onDecision, 
+const ApprovalActions = ({
   onDelete,
   onConfirmDelete,
   isLoading,
   isCreator = false,
   canDecide = false,
   confirmOpen,
-  setConfirmOpen
+  setConfirmOpen,
+  // eslint-disable-next-line no-unused-vars
+  approval,
+  myRecipient, // 🆕 Passa il recipient corrente per ottenere il token
 }) => {
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
-  const [comments, setComments] = useState('');
+  const [comments, setComments] = useState("");
+
+  console.log("🔍 ApprovalActions render:", { canDecide, myRecipient }); // DEBUG
+
+  // 🆕 Usa l'hook per le azioni di approvazione
+  const {
+    approve,
+    reject,
+    loading: approvalLoading,
+    status,
+    isCompleted,
+  } = useApprovalAction(myRecipient?.approval_token);
+
+  // Se già completato, mostra stato
+  if (isCompleted) {
+    return (
+      <div className="bg-gray-50 rounded-lg p-4 border">
+        <div className="flex items-center space-x-2">
+          {status === "approved" ? (
+            <Check className="h-5 w-5 text-green-600" />
+          ) : (
+            <X className="h-5 w-5 text-red-600" />
+          )}
+          <span className="font-medium">
+            Hai {status === "approved" ? "approvato" : "rifiutato"} questa
+            richiesta
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   const handleAction = (action) => {
+    console.log("🔍 handleAction called:", action); // DEBUG
     setPendingAction(action);
     setShowCommentDialog(true);
   };
 
-  const confirmDecision = () => {
-    const approved = pendingAction === 'approve';
-    onDecision && onDecision(approved, comments);
-    setShowCommentDialog(false);
-    setComments('');
-    setPendingAction(null);
+  const confirmDecision = async () => {
+    console.log("🔍 confirmDecision called:", pendingAction, comments); // DEBUG
+    try {
+      if (pendingAction === "approve") {
+        await approve(comments);
+      } else {
+        await reject(comments);
+      }
+      setShowCommentDialog(false);
+      setComments("");
+      setPendingAction(null);
+    } catch (error) {
+      console.error("🔍 Decision error:", error); // DEBUG
+    }
   };
 
   return (
     <>
-      <Separator className="mb-4" />
-      
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <MessageSquare className="h-4 w-4" />
-          <span>
-            {isCreator && onDelete && 'Gestisci la tua richiesta'}
-            {canDecide && onDecision && 'La tua decisione è richiesta'}
-          </span>
-        </div>
+      <Separator className="my-4" />
 
-        <div className="flex items-center gap-2">
-          {/* Pulsante Delete per Creator */}
-          {isCreator && onDelete && (
+      <div className="flex space-x-3">
+        {canDecide && (
+          <>
             <Button
-              variant="outline"
-              size="sm"
-              onClick={onDelete}
-              disabled={isLoading}
-              className="border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
+              type="button" // 🔧 IMPORTANTE: Evita submit del form
+              onClick={() => handleAction("approve")}
+              disabled={approvalLoading}
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
             >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Elimina Richiesta
-            </Button>
-          )}
-
-          {/* Pulsanti Approva/Rifiuta per Recipient */}
-          {canDecide && onDecision && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleAction('reject')}
-                disabled={isLoading}
-                className="border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
-              >
-                <X className="h-4 w-4 mr-2" />
-                Rifiuta
-              </Button>
-              
-              <Button
-                size="sm"
-                onClick={() => handleAction('approve')}
-                disabled={isLoading}
-                className="bg-green-600 hover:bg-green-700 text-white"
-              >
+              {approvalLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
                 <Check className="h-4 w-4 mr-2" />
-                Approva
-              </Button>
-            </>
-          )}
-        </div>
+              )}
+              Approva
+            </Button>
+
+            <Button
+              type="button" // 🔧 IMPORTANTE: Evita submit del form
+              onClick={() => handleAction("reject")}
+              disabled={approvalLoading}
+              variant="destructive"
+              className="flex-1"
+            >
+              {approvalLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <X className="h-4 w-4 mr-2" />
+              )}
+              Rifiuta
+            </Button>
+          </>
+        )}
+
+        {isCreator && (
+          <Button
+            type="button" // 🔧 IMPORTANTE
+            onClick={onDelete}
+            disabled={isLoading}
+            variant="outline"
+            className="border-red-200 text-red-600 hover:bg-red-50"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Elimina
+          </Button>
+        )}
       </div>
 
-      {/* Dialog Delete */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+      {/* Dialog per commenti */}
+      <Dialog open={showCommentDialog} onOpenChange={setShowCommentDialog}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-red-600">
-              Elimina Richiesta
+            <DialogTitle>
+              {pendingAction === "approve"
+                ? "Approva Richiesta"
+                : "Rifiuta Richiesta"}
             </DialogTitle>
             <DialogDescription>
-              Sei sicuro di voler eliminare questa richiesta di approvazione? 
-              Questa azione non può essere annullata.
+              Aggiungi un commento opzionale alla tua decisione.
             </DialogDescription>
           </DialogHeader>
-          
+
+          <div className="space-y-4">
+            <Textarea
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              placeholder="Commenti opzionali..."
+              rows={3}
+            />
+          </div>
+
           <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setConfirmOpen(false)}
-              disabled={isLoading}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowCommentDialog(false)}
             >
               Annulla
             </Button>
-            <Button 
-              onClick={onConfirmDelete}
-              disabled={isLoading}
-              className="bg-red-600 hover:bg-red-700"
+            <Button
+              type="button"
+              onClick={confirmDecision}
+              disabled={approvalLoading}
+              className={
+                pendingAction === "approve"
+                  ? "bg-green-600 hover:bg-green-700"
+                  : ""
+              }
+              variant={pendingAction === "reject" ? "destructive" : "default"}
             >
-              {isLoading ? 'Eliminazione...' : 'Elimina'}
+              {approvalLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : pendingAction === "approve" ? (
+                <Check className="h-4 w-4 mr-2" />
+              ) : (
+                <X className="h-4 w-4 mr-2" />
+              )}
+              Conferma{" "}
+              {pendingAction === "approve" ? "Approvazione" : "Rifiuto"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog per approve/reject con commenti */}
-      <Dialog open={showCommentDialog} onOpenChange={setShowCommentDialog}>
-        <DialogContent className="sm:max-w-[425px]">
+      {/* Dialog di conferma eliminazione */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {pendingAction === 'approve' ? 'Conferma Approvazione' : 'Conferma Rifiuto'}
-            </DialogTitle>
+            <DialogTitle>Conferma Eliminazione</DialogTitle>
             <DialogDescription>
-              {pendingAction === 'approve' 
-                ? 'Stai per approvare questo documento. Puoi aggiungere un commento opzionale.'
-                : 'Stai per rifiutare questo documento. Ti consigliamo di specificare il motivo.'
-              }
+              Sei sicuro di voler eliminare questa richiesta di approvazione?
+              Questa azione non può essere annullata.
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="grid gap-4 py-4">
-            <Textarea
-              placeholder={
-                pendingAction === 'approve'
-                  ? "Commento opzionale..."
-                  : "Specifica il motivo del rifiuto..."
-              }
-              value={comments}
-              onChange={(e) => setComments(e.target.value)}
-              className="min-h-[100px]"
-            />
-          </div>
-          
           <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setShowCommentDialog(false)}
-              disabled={isLoading}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
             >
               Annulla
             </Button>
-            <Button 
-              onClick={confirmDecision}
-              disabled={isLoading}
-              className={
-                pendingAction === 'approve'
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-red-600 hover:bg-red-700"
-              }
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={onConfirmDelete}
             >
-              {isLoading ? 'Invio...' : (pendingAction === 'approve' ? 'Approva' : 'Rifiuta')}
+              Elimina
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,8 +1,8 @@
-// src/components/approvals/RecipientsList.jsx
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Check, X, Clock, User } from 'lucide-react';
+import { Check, X, Clock, User, MessageSquare } from 'lucide-react';
+import {Tooltip} from '@/components/ui/tooltip';
 
 // eslint-disable-next-line no-unused-vars
 const RecipientsList = ({ recipients = [], currentUserEmail, variant }) => {
@@ -10,89 +10,110 @@ const RecipientsList = ({ recipients = [], currentUserEmail, variant }) => {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'approved': return <Check className="h-3 w-3 text-green-600" />;
-      case 'rejected': return <X className="h-3 w-3 text-red-600" />;
-      case 'pending': return <Clock className="h-3 w-3 text-yellow-600" />;
-      default: return <User className="h-3 w-3 text-gray-400" />;
+      case 'approved':
+        return <Check className="h-3 w-3 text-green-600" />;
+      case 'rejected':
+        return <X className="h-3 w-3 text-red-600" />;
+      case 'pending':
+        return <Clock className="h-3 w-3 text-yellow-600" />;
+      default:
+        return <Clock className="h-3 w-3 text-gray-400" />;
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'approved': return 'border-green-200 text-green-800 bg-green-50';
-      case 'rejected': return 'border-red-200 text-red-800 bg-red-50';
-      case 'pending': return 'border-yellow-200 text-yellow-800 bg-yellow-50';
-      default: return 'border-gray-200 text-gray-800 bg-gray-50';
+      case 'approved':
+        return 'bg-green-100 text-green-800';
+      case 'rejected':
+        return 'bg-red-100 text-red-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const getInitials = (email, name) => {
-    if (name) {
-      return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'approved':
+        return 'Approvato';
+      case 'rejected':
+        return 'Rifiutato';
+      case 'pending':
+        return 'In attesa';
+      default:
+        return 'Sconosciuto';
     }
-    return email.split('@').slice(0, 2).toUpperCase();
+  };
+
+  const getInitials = (name, email) => {
+    if (name) {
+      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+    if (email) {
+      return email.split('@').slice(0, 2).toUpperCase();
+    }
+    return 'U';
+  };
+
+  const getName = (recipient) => {
+    return recipient.recipient_name || 
+           recipient.recipient_email?.split('@') || 
+           'Sconosciuto';
   };
 
   return (
-    <div className="mb-4">
-      <h4 className="text-sm font-medium text-gray-700 mb-3">
-        Approvatori ({recipients.length})
+    <div className="space-y-3">
+      <h4 className="text-sm font-medium text-gray-900 flex items-center">
+        <User className="h-4 w-4 mr-2" />
+        Destinatari ({recipients.length})
       </h4>
-      
       <div className="space-y-2">
-        {recipients.map((recipient, index) => (
-          <div 
-            key={index}
-            className={`flex items-center justify-between p-3 rounded-lg border ${
+        {recipients.map((recipient) => (
+          <div
+            key={recipient.id}
+            className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
               recipient.recipient_email === currentUserEmail 
-                ? 'border-blue-200 bg-blue-50' 
-                : 'border-gray-200 bg-gray-50'
+                ? 'bg-blue-50 border-blue-200' 
+                : 'bg-gray-50 border-gray-200'
             }`}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center space-x-3">
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="text-xs">
-                  {getInitials(recipient.recipient_email, recipient.recipient_name)}
+                <AvatarFallback className="text-xs bg-gray-200 text-gray-700">
+                  {getInitials(recipient.recipient_name, recipient.recipient_email)}
                 </AvatarFallback>
               </Avatar>
               
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-900">
-                    {recipient.recipient_name || recipient.recipient_email}
-                  </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {getName(recipient)}
                   {recipient.recipient_email === currentUserEmail && (
-                    <Badge variant="outline" className="text-xs border-blue-200 text-blue-800">
-                      Tu
-                    </Badge>
+                    <span className="ml-2 text-xs text-blue-600 font-medium">(Tu)</span>
                   )}
-                </div>
-                {recipient.recipient_name && (
-                  <span className="text-xs text-gray-500">
-                    {recipient.recipient_email}
-                  </span>
-                )}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {recipient.recipient_email}
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Badge 
-                variant="outline" 
-                className={`text-xs ${getStatusColor(recipient.status)}`}
-              >
-                <span className="flex items-center gap-1">
-                  {getStatusIcon(recipient.status)}
-                  {recipient.status === 'pending' && 'In attesa'}
-                  {recipient.status === 'approved' && 'Approvato'}
-                  {recipient.status === 'rejected' && 'Rifiutato'}
-                </span>
-              </Badge>
-              
-              {recipient.responded_at && (
-                <span className="text-xs text-gray-400">
-                  {new Date(recipient.responded_at).toLocaleDateString('it-IT')}
-                </span>
+            <div className="flex items-center space-x-2">
+              {/* 💬 Comment Icon with Tooltip */}
+              {recipient.comments && (
+                <Tooltip content={recipient.comments} position="left">
+                  <div className="p-1.5 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors">
+                    <MessageSquare className="h-3 w-3" />
+                  </div>
+                </Tooltip>
               )}
+
+              {/* Status Badge */}
+              <Badge className={`${getStatusColor(recipient.status)} flex items-center space-x-1`}>
+                {getStatusIcon(recipient.status)}
+                <span className="text-xs">{getStatusText(recipient.status)}</span>
+              </Badge>
             </div>
           </div>
         ))}

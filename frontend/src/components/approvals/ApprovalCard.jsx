@@ -1,20 +1,20 @@
 // src/components/approvals/ApprovalCard.jsx
-import React, { useState } from 'react';
-import { Card } from '@/components/ui/card';
-import ApprovalHeader from './ApprovalHeader';
-import ApprovalDetails from './ApprovalDetails';
-import RecipientsList from './RecipientsList';
-import ApprovalActions from './ApprovalActions';
-import CommentsSection from './CommentsSection';
-import DocumentViewer from './DocumentViewer'; // 🆕 NUOVO IMPORT
-import { useApproveByToken, useDeleteApproval } from '@/hooks/useApprovals';
-import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
+import React, { useState } from "react";
+import { Card } from "@/components/ui/card";
+import ApprovalHeader from "./ApprovalHeader";
+import ApprovalDetails from "./ApprovalDetails";
+import RecipientsList from "./RecipientsList";
+import ApprovalActions from "./ApprovalActions";
+import CommentsSection from "./CommentsSection";
+import DocumentViewer from "./DocumentViewer"; // 🆕 NUOVO IMPORT
+import { useApproveByToken, useDeleteApproval } from "@/hooks/useApprovals";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
-const ApprovalCard = ({ 
-  approval, 
-  showActions = false, 
-  variant = 'default'
+const ApprovalCard = ({
+  approval,
+  showActions = false,
+  variant = "default",
 }) => {
   const { user } = useAuth();
   const approveMutation = useApproveByToken();
@@ -22,32 +22,31 @@ const ApprovalCard = ({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Trova il recipient corrente
-  const myRecipient = approval.recipients?.find(r => 
-    r.recipient_email === user?.email
+  const myRecipient = approval.recipients?.find(
+    (r) => r.recipient_email === user?.email
   );
 
-  const isCreator = (
+  const isCreator =
     user?.email === approval.requester?.email ||
     user?.id === approval.requester?.id ||
-    user?.id === approval.requester_id
-  );
+    user?.id === approval.requester_id;
 
-  const canDecideAsRecipient = showActions && 
-    myRecipient && 
-    myRecipient.status === "pending" && 
+  const canDecideAsRecipient =
+    showActions &&
+    myRecipient &&
+    myRecipient.status === "pending" &&
     approval.status === "pending";
 
-  const canDeleteAsCreator = showActions && 
-    isCreator && 
-    approval.status === "pending";
+  const canDeleteAsCreator =
+    showActions && isCreator && approval.status === "pending";
 
   const handleDecision = (approved, comments = "") => {
     if (!myRecipient?.approval_token) return;
-    
+
     approveMutation.mutate({
       token: myRecipient.approval_token,
       approved,
-      comments
+      comments,
     });
   };
 
@@ -66,47 +65,43 @@ const ApprovalCard = ({
     }
   };
 
+  console.log("🔍 Debug myRecipient:", myRecipient);
+  console.log("🔍 Debug myRecipient token:", myRecipient?.approval_token);
+
   return (
     <Card className="w-full mb-4 shadow-sm hover:shadow-md transition-shadow">
       <div className="p-6">
-        <ApprovalHeader 
-          approval={approval}
-          variant={variant}
-        />
+        <ApprovalHeader approval={approval} variant={variant} />
 
-        <ApprovalDetails 
-          approval={approval}
-          myRecipient={myRecipient}
-        />
+        <ApprovalDetails approval={approval} myRecipient={myRecipient} />
 
-        <RecipientsList 
+        <RecipientsList
           recipients={approval.recipients}
           currentUserEmail={user?.email}
           variant={variant}
         />
 
         {/* 🆕 DOCUMENTO VIEWER - Solo per recipients */}
-        <DocumentViewer 
+        <DocumentViewer
           approval={approval}
-          showForRecipient={!isCreator} 
+          showForRecipient={!isCreator}
           currentUserEmail={user?.email}
         />
 
-        {approval.recipients?.some(r => r.comments) && (
-          <CommentsSection 
-            recipients={approval.recipients}
-          />
+        {approval.recipients?.some((r) => r.comments) && (
+          <CommentsSection recipients={approval.recipients} />
         )}
 
         {(canDecideAsRecipient || canDeleteAsCreator) && (
-          <ApprovalActions 
-            onDecision={canDecideAsRecipient ? handleDecision : null}
-            onDelete={canDeleteAsCreator ? () => setConfirmOpen(true) : null}
+          <ApprovalActions
+            onDecision={handleDecision}
+            onDelete={() => setConfirmOpen(true)}
             onConfirmDelete={handleConfirmDelete}
             isLoading={approveMutation.isLoading || deleteApproval.isLoading}
             isCreator={isCreator && showActions}
             canDecide={canDecideAsRecipient}
             approval={approval}
+            myRecipient={myRecipient} // 🆕 AGGIUNGI QUESTA PROP
             confirmOpen={confirmOpen}
             setConfirmOpen={setConfirmOpen}
           />

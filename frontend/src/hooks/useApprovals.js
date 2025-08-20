@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../api/client'
+import { toast } from 'sonner';
 
 // ✅ API functions ALLINEATE con il backend
 const approvalsApi = {
@@ -241,3 +242,66 @@ export const useApprovalsForMe = (options = {}) => {
   });
 };
 
+export const useApprovalAction = (token) => {
+  const queryClient = useQueryClient(); // 🆕 Aggiungi questo
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [decision, setDecision] = useState(null);
+
+  const submitDecision = async (decisionType, comments = '') => {
+    if (!token) {
+      throw new Error('Token di approvazione mancante');
+    }
+
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await apiClient.post(`/approvals/submit/${token}`, {
+        decision: decisionType,
+        comments: comments?.trim() || null
+      });
+
+      setStatus(decisionType);
+      setDecision(response.data);
+      
+      // 🔄 Invalida le query per aggiornare i filtri
+      queryClient.invalidateQueries({ queryKey: ['approvals'] });
+      queryClient.invalidateQueries({ queryKey: ['approval-stats'] });
+      
+      const actionText = decisionType === 'approved' ? 'approvata' : 'rifiutata';
+      toast.success(`Richiesta ${actionText} con successo!`);
+      
+      return response.data;
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || `Errore durante ${decisionType === 'approved' ? 'l\'approvazione' : 'il rifiuto'}`;
+      setError(errorMsg);
+      toast.error(errorMsg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const approve = (comments = '') => submitDecision('approved', comments);
+  const reject = (comments = '') => submitDecision('rejected', comments);
+
+  const reset = () => {
+    setLoading(false);
+    setError(null);
+    setStatus(null);
+    setDecision(null);
+  };
+
+  return {
+    approve,
+    reject,
+    loading,
+    error,
+    status,
+    decision,
+    reset,
+    isCompleted: status !== null
+  };
+};

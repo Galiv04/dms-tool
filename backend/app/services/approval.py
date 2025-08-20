@@ -313,7 +313,8 @@ class ApprovalService:
                         "id": r.id,
                         "recipient_email": r.recipient_email,
                         "recipient_name": r.recipient_name,
-                        "status": r.status
+                        "status": r.status,
+                        "approval_token": r.approval_token
                     }
                     for r in recipients
                 ]

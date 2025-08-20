@@ -193,7 +193,7 @@ class RecipientInfo(BaseModel):
     recipient_email: str
     recipient_name: Optional[str] = None
     status: RecipientStatus
-    
+    approval_token: str
     model_config = ConfigDict(from_attributes=True)
     
 class ApprovalRequestListResponse(BaseModel):
